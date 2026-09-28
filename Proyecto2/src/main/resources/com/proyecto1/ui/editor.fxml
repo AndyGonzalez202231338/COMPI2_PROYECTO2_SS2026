@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import com.proyecto1.ui.editor.EditorCodigo?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Pane?>
+<?import javafx.scene.text.Text?>
+
+<!-- El ScrollPane envuelve gutter + editor: ambos comparten el scroll vertical. -->
+<ScrollPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:id="scrollEditor"
+            fx:controller="com.proyecto1.ui.controller.EditorController"
+            fitToWidth="true"
+            fitToHeight="true"
+            hbarPolicy="AS_NEEDED"
+            vbarPolicy="AS_NEEDED"
+            styleClass="scroll-editor">
+
+    <HBox alignment="TOP_LEFT" styleClass="contenedor-editor">
+
+        <Pane fx:id="panelGutter" styleClass="gutter"
+              prefWidth="46" minWidth="46" maxWidth="46">
+            <Text fx:id="textoNumeros" styleClass="gutter-texto"/>
+        </Pane>
+
+        <EditorCodigo fx:id="editorCodigo" HBox.hgrow="ALWAYS"/>
+    </HBox>
+</ScrollPane>
