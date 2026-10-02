@@ -209,7 +209,16 @@ public final class Llamada extends NodoZ implements ExpresionZ {
             // Llamada sobre objeto: clase cacheada en verificar.
             clase = (nombreClaseObjetivo != null) ? nombreClaseObjetivo : "?";
         }
-        String etiqueta = generador.etiquetaMetodo(clase, metodo);
+        // Tipos FORMALES del símbolo resuelto (excluye "this").
+        List<Tipo> tiposFormales = new java.util.ArrayList<>();
+        if (simboloMetodo != null) {
+            for (com.proyecto1.semantico.tabla.Simbolo p : simboloMetodo.getParametros()) {
+                tiposFormales.add(p.getTipo() != null
+                        ? p.getTipo()
+                        : TipoPrimitivo.DESCONOCIDO);
+            }
+        }
+        String etiqueta = GeneradorC3D.etiquetaMetodo(clase, metodo, tiposFormales);
 
         boolean esVoid = (simboloMetodo != null
                 && simboloMetodo.getTipo() != null

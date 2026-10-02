@@ -25,6 +25,14 @@ public final class NuevoObjeto extends NodoPigLatin implements ExpresionPigLatin
     private final String nombreTipo;
     private final List<ExpresionPigLatin> argumentos;
 
+    /**
+     * Constructor de la clase resuelto en verificar(), cacheado para que
+     * generarC3D pueda obtener los tipos FORMALES y construir la etiqueta
+     * manglada coherente con la que registró Constructor.generarC3D.
+     * Es null si verificar() no corrió o no encontró el constructor.
+     */
+    private Simbolo constructorResuelto;
+
     public NuevoObjeto(String nombreTipo, List<ExpresionPigLatin> argumentos, int linea, int columna) {
         super(linea, columna);
         this.nombreTipo = nombreTipo;
@@ -44,13 +52,17 @@ public final class NuevoObjeto extends NodoPigLatin implements ExpresionPigLatin
 
         if (s.getCategoria() == CategoriaSimbolo.CLASE) {
             // Verificación de aridad contra el constructor (mismo patrón que Z).
-            boolean hayConstructor = s.getMiembros().valores().stream()
-                    .anyMatch(m -> m.getCategoria() == CategoriaSimbolo.CONSTRUCTOR
-                            && m.getParametros().size() == argumentos.size());
-            if (!hayConstructor)
+            // Se cachea el símbolo del constructor para usar sus tipos formales en generarC3D.
+            Simbolo ctor = s.getMiembros().valores().stream()
+                    .filter(m -> m.getCategoria() == CategoriaSimbolo.CONSTRUCTOR
+                            && m.getParametros().size() == argumentos.size())
+                    .findFirst().orElse(null);
+            if (ctor == null)
                 errores.reportar(linea, columna,
                         "No existe constructor de '" + nombreTipo + "' con " +
                                 argumentos.size() + " argumentos");
+            else
+                this.constructorResuelto = ctor;
             for (ExpresionPigLatin a : argumentos) a.verificar(ambito, errores);
             return new TipoClase(s);
         }
@@ -107,7 +119,17 @@ public final class NuevoObjeto extends NodoPigLatin implements ExpresionPigLatin
             for (String lugar : lugaresArgs) {
                 generador.emitirParam(lugar);
             }
-            String etiqueta = generador.etiquetaConstructor(nombreTipo, argumentos.size());
+
+            // Tipos FORMALES del constructor resuelto (para mangling coherente).
+            List<Tipo> tiposFormales = new java.util.ArrayList<>();
+            if (constructorResuelto != null) {
+                for (Simbolo p : constructorResuelto.getParametros()) {
+                    tiposFormales.add(p.getTipo() != null
+                            ? p.getTipo()
+                            : TipoPrimitivo.DESCONOCIDO);
+                }
+            }
+            String etiqueta = GeneradorC3D.etiquetaConstructor(nombreTipo, tiposFormales);
             generador.emitirCall(etiqueta, argumentos.size() + 1, null);
 
             return ResultadoC3D.temporal(t, new TipoClase(s));

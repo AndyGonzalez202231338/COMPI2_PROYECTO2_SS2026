@@ -109,7 +109,18 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
     public ResultadoC3D generarC3D(GeneradorC3D generador, List<Atributo> atributosClase) {
         // Usar el nombre real de la clase (si verificar ya corrió), no el declarado.
         String nombreParaEtiqueta = (nombreClaseReal != null) ? nombreClaseReal : nombre;
-        String etiqueta = generador.etiquetaConstructor(nombreParaEtiqueta, parametros.size());
+
+        // Tipos formales de los parámetros (excluye "this").
+        List<Tipo> tiposFormales = new java.util.ArrayList<>();
+        for (Parametro p : parametros) {
+            Tipo tp = (ambitoPropio != null)
+                    ? ambitoPropio.resolverLocal(p.getNombre()) != null
+                    ? ambitoPropio.resolverLocal(p.getNombre()).getTipo()
+                    : null
+                    : null;
+            tiposFormales.add(tp != null ? tp : com.proyecto1.semantico.tipos.TipoPrimitivo.DESCONOCIDO);
+        }
+        String etiqueta = GeneradorC3D.etiquetaConstructor(nombreParaEtiqueta, tiposFormales);
 
         // --- Registrar la firma ANTES del begin_func ---
         // "this" primero (TipoClase del contenedor), luego los formales en orden.

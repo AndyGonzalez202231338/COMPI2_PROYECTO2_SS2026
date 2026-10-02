@@ -113,7 +113,17 @@ public final class Metodo extends NodoZ {
      * su clase contenedora (solo sabe su nombre corto).
      */
     public ResultadoC3D generarC3D(GeneradorC3D generador, String nombreClase) {
-        String etiqueta = generador.etiquetaMetodo(nombreClase, nombre);
+        // Tipos formales de los parámetros (excluye "this").
+        List<Tipo> tiposFormales = new java.util.ArrayList<>();
+        for (Parametro p : parametros) {
+            Tipo tp = (ambitoPropio != null)
+                    ? ambitoPropio.resolverLocal(p.getNombre()) != null
+                    ? ambitoPropio.resolverLocal(p.getNombre()).getTipo()
+                    : null
+                    : null;
+            tiposFormales.add(tp != null ? tp : TipoPrimitivo.DESCONOCIDO);
+        }
+        String etiqueta = GeneradorC3D.etiquetaMetodo(nombreClase, nombre, tiposFormales);
 
         // --- Registrar la firma ANTES del begin_func ---
         // "this" primero (TipoClase del contenedor), luego los formales en orden.

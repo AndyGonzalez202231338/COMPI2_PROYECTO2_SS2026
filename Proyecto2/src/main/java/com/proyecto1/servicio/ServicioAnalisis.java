@@ -419,17 +419,28 @@ public class ServicioAnalisis {
                 String nombreClase = s.getNombre();
                 Tipo tipoThis = new com.proyecto1.semantico.tipos.TipoClase(s);
 
-                // OJO: se recorre getMiembros().valores() y NO getMiembrosEnOrden():
-                // los métodos y constructores de Z se registran con
-                // agregarMiembroConClave("Nombre#aridad#tipos", ...), que NO alimenta
-                // la lista ordenada (esa solo la pueblan los atributos).
                 for (Simbolo m : s.getMiembros().valores()) {
                     if (m.getCategoria() == CategoriaSimbolo.METODO) {
-                        String etiquetaMetodo = nombreClase + "_" + m.getNombre().split("#")[0];
+                        // Tipos formales del método (excluye "this").
+                        List<com.proyecto1.semantico.tipos.Tipo> tiposM = new java.util.ArrayList<>();
+                        for (Simbolo p : m.getParametros()) {
+                            tiposM.add(p.getTipo() != null
+                                    ? p.getTipo()
+                                    : com.proyecto1.semantico.tipos.TipoPrimitivo.DESCONOCIDO);
+                        }
+                        String nombrePlanoM = m.getNombre().split("#")[0];
+                        String etiquetaMetodo = GeneradorC3D.etiquetaMetodo(nombreClase, nombrePlanoM, tiposM);
                         out.put(etiquetaMetodo,
                                 firmaDeMetodoOConstructor(etiquetaMetodo, m, tipoThis, m.getTipo()));
                     } else if (m.getCategoria() == CategoriaSimbolo.CONSTRUCTOR) {
-                        String etiquetaCtor = GeneradorC3D.etiquetaConstructor(nombreClase, m.getParametros().size());
+                        // Tipos formales del constructor (excluye "this").
+                        List<com.proyecto1.semantico.tipos.Tipo> tiposC = new java.util.ArrayList<>();
+                        for (Simbolo p : m.getParametros()) {
+                            tiposC.add(p.getTipo() != null
+                                    ? p.getTipo()
+                                    : com.proyecto1.semantico.tipos.TipoPrimitivo.DESCONOCIDO);
+                        }
+                        String etiquetaCtor = GeneradorC3D.etiquetaConstructor(nombreClase, tiposC);
                         out.put(etiquetaCtor,
                                 firmaDeMetodoOConstructor(etiquetaCtor, m, tipoThis, TipoPrimitivo.VOID));
                     }
