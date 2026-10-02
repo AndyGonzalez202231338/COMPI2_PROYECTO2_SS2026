@@ -28,15 +28,19 @@ package com.proyecto1.codigo.c;
  * nombre (poco probable dado el prefijo rt_}, el linker se queja, lo cual es
  * deseable.
  */
-public final class RuntimeC {
+public final class RuntimeC implements ProveedorRuntime {
 
-    private RuntimeC() {}  // clase de utilidades
+    // Instancia singleton para pasar al orquestador sin crear objetos extra.
+    public static final RuntimeC INSTANCIA = new RuntimeC();
+
+    private RuntimeC() {}
 
     /**
      * Devuelve el código C completo del runtime, listo para inyectarse tras los
      * #include estándar. Incluye <stdio.h>, <stdlib.h> y <string.h> por seguridad (por si el orquestador se olvida).
      */
-    public static String codigo() {
+    @Override
+    public String codigo() {
         return """
                 /* ==== Runtime C generado ==== */
                 #include <stdio.h>

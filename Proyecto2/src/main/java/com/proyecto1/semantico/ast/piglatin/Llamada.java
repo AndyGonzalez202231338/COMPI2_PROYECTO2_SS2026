@@ -184,9 +184,19 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
         }
 
         // Caso "obj.m(args)": receptor ya evaluado, +1 al número de argumentos.
+        // Caso "obj.m(args)": receptor ya evaluado, +1 al número de argumentos.
         if (objetivo instanceof AccesoCampo ac) {
             String clase = (nombreClaseObjetivo != null) ? nombreClaseObjetivo : "?";
-            String etiqueta = generador.etiquetaMetodo(clase, ac.getCampo());
+            // Tipos FORMALES del símbolo resuelto (para mangling coherente con Z).
+            List<com.proyecto1.semantico.tipos.Tipo> tiposFormales = new java.util.ArrayList<>();
+            if (simboloResuelto != null) {
+                for (com.proyecto1.semantico.tabla.Simbolo p : simboloResuelto.getParametros()) {
+                    tiposFormales.add(p.getTipo() != null
+                            ? p.getTipo()
+                            : com.proyecto1.semantico.tipos.TipoPrimitivo.DESCONOCIDO);
+                }
+            }
+            String etiqueta = GeneradorC3D.etiquetaMetodo(clase, ac.getCampo(), tiposFormales);
             if (esVoid) {
                 generador.emitirCall(etiqueta, argumentos.size() + 1, null);
                 return ResultadoC3D.vacio();

@@ -20,6 +20,14 @@ public final class NuevoObjeto extends NodoZ implements ExpresionZ {
     private final String nombreClase;
     private final List<ExpresionZ> argumentos;
 
+    /**
+     * Símbolo del constructor resuelto en verificar(). Se usa en generarC3D para
+     * obtener los tipos FORMALES (no los de los argumentos reales) y construir la
+     * etiqueta manglada coherente con la que registró Constructor.generarC3D.
+     * Es null si verificar() no corrió o no encontró el constructor.
+     */
+    private Simbolo constructorResuelto;
+
     public NuevoObjeto(String nombreClase, List<ExpresionZ> argumentos, int linea, int columna) {
         super(linea, columna);
         this.nombreClase = nombreClase;
@@ -56,6 +64,7 @@ public final class NuevoObjeto extends NodoZ implements ExpresionZ {
                     "No existe constructor de '" + nombreClase + "' con "
                             + argumentos.size() + " argumentos");
         } else {
+            this.constructorResuelto = ctor;   // cachear para generarC3D
             List<Simbolo> params = ctor.getParametros();
             for (int i = 0; i < tiposArgs.size(); i++) {
                 if (!Tipos.esAsignable(params.get(i).getTipo(), tiposArgs.get(i))) {
@@ -108,9 +117,18 @@ public final class NuevoObjeto extends NodoZ implements ExpresionZ {
         }
 
         // 4) Llamar al constructor. Sin resultado: la referencia ya está en t.
-        int aridad = argumentos.size();
-        String etiqueta = generador.etiquetaConstructor(nombreClase, aridad);
-        generador.emitirCall(etiqueta, aridad + 1, null);
+        // Se usan los tipos FORMALES del símbolo resuelto (no los del argumento real)
+        // para reproducir exactamente la etiqueta que generó Constructor.generarC3D.
+        List<Tipo> tiposFormales = new java.util.ArrayList<>();
+        if (constructorResuelto != null) {
+            for (com.proyecto1.semantico.tabla.Simbolo p : constructorResuelto.getParametros()) {
+                tiposFormales.add(p.getTipo() != null
+                        ? p.getTipo()
+                        : TipoPrimitivo.DESCONOCIDO);
+            }
+        }
+        String etiqueta = GeneradorC3D.etiquetaConstructor(nombreClase, tiposFormales);
+        generador.emitirCall(etiqueta, argumentos.size() + 1, null);
 
         // Tipo del resultado: TipoClase(clase). Se resuelve del ámbito activo si se
         // puede; si no, DESCONOCIDO (degradación controlada, igual que Identificador).

@@ -47,9 +47,15 @@ public final class OrquestadorC3DaC {
     private final List<Simbolo> definicionesTipo;
     private final Map<String, GeneradorC3D.Firma> firmasExternas;
     private final AmbitoGlobal ambitoGlobalDeMain;
+    private final ProveedorRuntime proveedorRuntime;
 
     /**
      * Constructor central: asigna los 8 campos. Todos los demás delegan aquí.
+     */
+    /**
+     * Constructor central: asigna todos los campos. Todos los demás delegan aquí.
+     * Si proveedorRuntime es null se usa RuntimeC.INSTANCIA (compatibilidad con
+     * el pipeline actual, que siempre genera C).
      */
     private OrquestadorC3DaC(List<Cuadrupla> cuadruplas,
                              Map<String, GeneradorC3D.Firma> firmas,
@@ -59,7 +65,8 @@ public final class OrquestadorC3DaC {
                              String metodoEntradaZ,
                              List<Simbolo> definicionesTipo,
                              Map<String, GeneradorC3D.Firma> firmasExternas,
-                             AmbitoGlobal ambitoGlobalDeMain) {
+                             AmbitoGlobal ambitoGlobalDeMain,
+                             ProveedorRuntime proveedorRuntime) {
         this.cuadruplas = cuadruplas != null ? cuadruplas : List.of();
         this.firmas = firmas != null ? firmas : Map.of();
         this.prefijoLenguaje = (prefijoLenguaje != null) ? prefijoLenguaje : "";
@@ -69,6 +76,7 @@ public final class OrquestadorC3DaC {
         this.definicionesTipo = (definicionesTipo != null) ? definicionesTipo : List.of();
         this.firmasExternas = (firmasExternas != null) ? firmasExternas : Map.of();
         this.ambitoGlobalDeMain = ambitoGlobalDeMain;
+        this.proveedorRuntime = (proveedorRuntime != null) ? proveedorRuntime : RuntimeC.INSTANCIA;
     }
 
     public OrquestadorC3DaC(List<Cuadrupla> cuadruplas,
@@ -77,7 +85,7 @@ public final class OrquestadorC3DaC {
                             String nombreFuncionEntrada,
                             List<Simbolo> definicionesTipo) {
         this(cuadruplas, firmas, prefijoLenguaje, nombreFuncionEntrada,
-                null, null, definicionesTipo, Map.of(), null);
+                null, null, definicionesTipo, Map.of(), null, null);
     }
 
     public OrquestadorC3DaC(List<Cuadrupla> cuadruplas,
@@ -87,7 +95,7 @@ public final class OrquestadorC3DaC {
                             List<Simbolo> definicionesTipo,
                             Map<String, GeneradorC3D.Firma> firmasExternas) {
         this(cuadruplas, firmas, prefijoLenguaje, nombreFuncionEntrada,
-                null, null, definicionesTipo, firmasExternas, null);
+                null, null, definicionesTipo, firmasExternas, null, null);
     }
 
     public OrquestadorC3DaC(List<Cuadrupla> cuadruplas,
@@ -98,7 +106,7 @@ public final class OrquestadorC3DaC {
                             Map<String, GeneradorC3D.Firma> firmasExternas,
                             AmbitoGlobal ambitoGlobalDeMain) {
         this(cuadruplas, firmas, prefijoLenguaje, nombreFuncionEntrada,
-                null, null, definicionesTipo, firmasExternas, ambitoGlobalDeMain);
+                null, null, definicionesTipo, firmasExternas, ambitoGlobalDeMain, null);
     }
 
     public static OrquestadorC3DaC paraZetariano(List<Cuadrupla> cuadruplas,
@@ -108,7 +116,22 @@ public final class OrquestadorC3DaC {
                                                  String claseEntrada,
                                                  String metodoEntrada) {
         return new OrquestadorC3DaC(cuadruplas, firmas, prefijoLenguaje,
-                null, claseEntrada, metodoEntrada, definicionesTipo, Map.of(), null);
+                null, claseEntrada, metodoEntrada, definicionesTipo, Map.of(), null, null);
+    }
+
+    // Factoría para backends alternativos (RISC-V, etc.).
+    // Recibe un ProveedorRuntime personalizado en lugar de usar RuntimeC.
+    public static OrquestadorC3DaC conRuntime(List<Cuadrupla> cuadruplas,
+                                              Map<String, GeneradorC3D.Firma> firmas,
+                                              String prefijoLenguaje,
+                                              String nombreFuncionEntrada,
+                                              List<Simbolo> definicionesTipo,
+                                              Map<String, GeneradorC3D.Firma> firmasExternas,
+                                              AmbitoGlobal ambitoGlobalDeMain,
+                                              ProveedorRuntime runtime) {
+        return new OrquestadorC3DaC(cuadruplas, firmas, prefijoLenguaje,
+                nombreFuncionEntrada, null, null, definicionesTipo,
+                firmasExternas, ambitoGlobalDeMain, runtime);
     }
 
     /** Genera el archivo C completo: runtime + structs + prototipos + funciones + main. */
@@ -118,7 +141,7 @@ public final class OrquestadorC3DaC {
         StringBuilder sb = new StringBuilder();
         sb.append("/* Archivo generado automáticamente por OrquestadorC3DaC */\n\n");
 
-        sb.append(RuntimeC.codigo());
+        sb.append(proveedorRuntime.codigo());
         sb.append("\n");
 
         sb.append(new GeneradorStructsC().generar(definicionesTipo));
@@ -366,7 +389,7 @@ public final class OrquestadorC3DaC {
                 .append(" y llama a ").append(metodoEntradaZ).append(") */\n");
         sb.append("int main(void) {\n");
 
-        String etiquetaCtor = GeneradorC3D.etiquetaConstructor(claseEntradaZ, 0);
+        String etiquetaCtor = GeneradorC3D.etiquetaConstructor(claseEntradaZ, List.of());
         if (!firmas.containsKey(etiquetaCtor)) {
             sb.append("    /* ERROR: la clase '").append(claseEntradaZ)
                     .append("' no tiene un constructor sin argumentos (se esperaba '")
@@ -375,7 +398,7 @@ public final class OrquestadorC3DaC {
             return sb.toString();
         }
 
-        String etiquetaMetodo = GeneradorC3D.etiquetaMetodo(claseEntradaZ, metodoEntradaZ);
+        String etiquetaMetodo = GeneradorC3D.etiquetaMetodo(claseEntradaZ, metodoEntradaZ, List.of());
         GeneradorC3D.Firma firmaMetodo = firmas.get(etiquetaMetodo);
         if (firmaMetodo == null) {
             sb.append("    /* ERROR: el método de entrada '").append(metodoEntradaZ)

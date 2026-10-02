@@ -307,45 +307,77 @@ public class GeneradorC3D {
     }
 
     /**
-     * Etiqueta para un método de una clase Z: "Clase_metodo".
-     * Los métodos NO se sobrecargan en Z (declararMiembro los guarda por nombre plano).
-     *
-     * Es static (no depende de ningún estado de esta instancia) para que la Fase 4
-     * (OrquestadorC3DaC, al armar el main() de un programa Zetariano) pueda construir
-     * la misma etiqueta sin necesitar un GeneradorC3D a mano — solo el nombre de la
-     * clase y el método.
+     * Sanitiza Tipo.nombre() para que sea un identificador C válido:
+     * reemplaza cualquier carácter no alfanumérico (corchetes, espacios, puntos,
+     * signos de interrogación…) por '_'. Si el tipo es null o DESCONOCIDO,
+     * devuelve "x" (determinista, para no romper el mangling en programas con
+     * errores semánticos previos).
      */
-    public static String etiquetaMetodo(String clase, String metodo) {
-        return clase + "_" + metodo;
+    private static String mangleTipo(Tipo t) {
+        if (t == null) return "x";
+        String n = t.nombre();
+        if (n == null || n.isEmpty()) return "x";
+        return n.replaceAll("[^A-Za-z0-9]", "_");
     }
 
     /**
-     * Etiqueta para un constructor de una clase Z: "Clase_init_aN" (N = aridad).
-     * Los constructores SÍ se sobrecargan por aridad, de ahí el sufijo.
+     * Etiqueta para un método de una clase Z, CON mangling de tipos:
+     *   sin parámetros  ->  "Clase_metodo"
+     *   con parámetros  ->  "Clase_metodo_T1_T2_…_Tn"
      *
-     * Por qué "_aN" y no "@N": la etiqueta de un constructor termina siendo, tal cual,
-     * el NOMBRE DE LA FUNCIÓN en el C generado (ver CuadruplaBeginFunc.nombre() y
-     * cada CuadruplaCall.funcion() que la referencia) — y @ no es un carácter válido
-     * en un identificador de C. Antes esta etiqueta era "Clase_init@N", lo cual
-     * compilaba bien como C3D pero generaba C inválido en CUALQUIER llamada a un
-     * constructor. Es un cambio de formato, no de significado: sigue siendo "nombre
-     * de clase + aridad", legible y sin colisión entre aridades distintas del mismo
-     * constructor.
+     * El parámetro implícito "this" NO se incluye.
      *
-     * Es static por el mismo motivo que etiquetaMetodo: la Fase 4 necesita poder
-     * reconstruir esta etiqueta (para buscar el constructor de 0 argumentos de la
-     * clase de entrada al armar main()) sin una instancia.
-     *
-     * Deuda detectada: hoy Constructor.verificar intenta resolver el constructor
-     * buscando por nombre + "@" + aridad (con el separador viejo), pero
-     * AmbitoContenedor.declararMiembro los guarda por nombre plano. Es una
-     * incoherencia preexistente entre esas dos clases (no de C3D, y no la resuelve
-     * este cambio). Antes de generar C3D con constructores sobrecargados, hay que
-     * decidir cuál de las dos se arregla: o declararMiembro usa una clave única al
-     * declararlos, o Constructor.verificar busca por nombre plano.
+     * Es static para que OrquestadorC3DaC pueda construir la misma etiqueta
+     * sin una instancia del generador.
      */
+    public static String etiquetaMetodo(String clase, String metodo, List<Tipo> tiposFormales) {
+        StringBuilder sb = new StringBuilder(clase).append("_").append(metodo);
+        for (Tipo t : tiposFormales) {
+            sb.append("_").append(mangleTipo(t));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Etiqueta para un constructor de una clase Z, CON mangling de tipos:
+     *   Clase()          ->  "Clase_init_a0"
+     *   Clase(int)       ->  "Clase_init_a1_entero"
+     *   Clase(int,String)->  "Clase_init_a2_entero_cadena"
+     *
+     * El parámetro implícito "this" NO se incluye.
+     *
+     * Es static por el mismo motivo que etiquetaMetodo.
+     */
+    public static String etiquetaConstructor(String clase, List<Tipo> tiposFormales) {
+        StringBuilder sb = new StringBuilder(clase)
+                .append("_init_a").append(tiposFormales.size());
+        for (Tipo t : tiposFormales) {
+            sb.append("_").append(mangleTipo(t));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * @deprecated Usa {@link #etiquetaMetodo(String, String, List)} con la lista de
+     *             tipos formales. Esta sobrecarga queda sólo para no romper código
+     *             transitorio; no la uses desde código nuevo.
+     */
+    @Deprecated
+    public static String etiquetaMetodo(String clase, String metodo) {
+        return etiquetaMetodo(clase, metodo, List.of());
+    }
+
+    /**
+     * @deprecated Usa {@link #etiquetaConstructor(String, List)} con la lista de
+     *             tipos formales. Esta sobrecarga queda sólo para no romper código
+     *             transitorio; no la uses desde código nuevo.
+     */
+    @Deprecated
     public static String etiquetaConstructor(String clase, int aridad) {
-        return clase + "_init_a" + aridad;
+        // Fallback: construye una lista de "x" tantos como la aridad para mantener
+        // la misma cantidad de segmentos; no hay información de tipos.
+        List<Tipo> dummy = java.util.Collections.nCopies(aridad, null);
+        return etiquetaConstructor(clase, dummy);
     }
 
     // ---------- Acceso a la tabla / backpatching ----------
