@@ -37,9 +37,38 @@ public final class Metodo extends NodoZ {
      */
     private AmbitoFuncion ambitoPropio;
 
+    // Fase 2: modificador de acceso; DEFAULT si no se escribio ninguno.
+    private final ModificadorAcceso modificador;
+
+    /**
+     * Fase 2: anotacion escrita antes del metodo, sin el '@'.
+     *   null       -> no habia anotacion
+     *   "Override" -> metodo marcado como sobrescritura (polimorfismo)
+     *   otro texto -> anotacion invalida; se reporta en verificar()
+     *   Se guarda el texto y no solo un boolean para poder dar un mensaje claro.
+     */
+    private final String anotacion;
+    private final int lineaAnotacion;
+    private final int columnaAnotacion;
+
+    public static final String ANOTACION_OVERRIDE = "Override";
+
+    // Constructor de la Fase 1: metodo public sin anotacion.
     public Metodo(String nombre, List<Parametro> parametros, NodoTipoRef tipoRetorno,
                   Bloque cuerpo, int linea, int columna) {
+        this(ModificadorAcceso.PUBLIC, null, linea, columna,
+                nombre, parametros, tipoRetorno, cuerpo, linea, columna);
+    }
+
+    public Metodo(ModificadorAcceso modificador,
+                  String anotacion, int lineaAnotacion, int columnaAnotacion,
+                  String nombre, List<Parametro> parametros, NodoTipoRef tipoRetorno,
+                  Bloque cuerpo, int linea, int columna) {
         super(linea, columna);
+        this.modificador = (modificador != null) ? modificador : ModificadorAcceso.DEFAULT;
+        this.anotacion = anotacion;
+        this.lineaAnotacion = lineaAnotacion;
+        this.columnaAnotacion = columnaAnotacion;
         this.nombre = nombre;
         this.parametros = parametros;
         this.tipoRetorno = tipoRetorno;
@@ -48,6 +77,19 @@ public final class Metodo extends NodoZ {
 
     public String getNombre() {
         return nombre;
+    }
+
+    public ModificadorAcceso getModificador() {
+        return modificador;
+    }
+
+    public String getAnotacion() {
+        return anotacion;
+    }
+
+    // true solo si la anotacion es exactamente @Override.
+    public boolean esOverride() {
+        return ANOTACION_OVERRIDE.equals(anotacion);
     }
 
     public List<Parametro> getParametros() {
@@ -71,6 +113,12 @@ public final class Metodo extends NodoZ {
     }
 
     public void verificar(AmbitoClase ambClase, ManejadorErrores errores) {
+        // La gramatica acepta "@ ID" con cualquier ID para poder dar este mensaje.
+        if (anotacion != null && !esOverride()) {
+            errores.reportar(lineaAnotacion, columnaAnotacion,
+                    "Se esperaba @" + ANOTACION_OVERRIDE + ", se encontro @" + anotacion);
+        }
+
         StringBuilder sb = new StringBuilder(nombre).append("#").append(parametros.size());
         for (Parametro p : parametros) {
             Tipo tp = p.getTipo().resolver(ambClase, errores);
