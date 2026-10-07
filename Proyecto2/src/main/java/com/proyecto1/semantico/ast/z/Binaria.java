@@ -60,6 +60,13 @@ public final class Binaria extends NodoZ implements ExpresionZ {
 
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
+        // && y || no evaluan siempre los dos lados: se generan con saltos.
+        if (GeneradorC3D.esLogicoCortoCircuito(operador)) {
+            return generador.generarLogicoCortoCircuito(operador,
+                    () -> izquierdo.generarC3D(generador),
+                    () -> derecho.generarC3D(generador));
+        }
+
         ResultadoC3D a = izquierdo.generarC3D(generador);
         ResultadoC3D b = derecho.generarC3D(generador);
 
@@ -70,7 +77,6 @@ public final class Binaria extends NodoZ implements ExpresionZ {
                 tipo = (r == null) ? TipoPrimitivo.DESCONOCIDO : r;
                 break;
             case "==": case "!=": case "<": case ">": case "<=": case ">=":
-            case "&&": case "||":
                 tipo = TipoPrimitivo.BOOL;
                 break;
             default:
