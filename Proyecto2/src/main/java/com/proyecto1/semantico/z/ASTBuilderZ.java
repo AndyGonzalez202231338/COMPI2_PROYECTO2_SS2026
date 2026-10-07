@@ -1,5 +1,6 @@
 package com.proyecto1.semantico.z;
 
+import com.proyecto1.semantico.tabla.ModificadorAcceso;
 import com.proyecto1.GramaticaZ;
 import com.proyecto1.GramaticaZBaseVisitor;
 import com.proyecto1.semantico.LiteralUtil;
@@ -26,14 +27,16 @@ public class ASTBuilderZ extends GramaticaZBaseVisitor<NodoAST> {
     // COMPILATION UNIT / CLASS BODY
 
     /**
-     * compilationUnit
-     *     : accessModifier? CLASS nombre=ID (EXTENDS padre=ID)? LLAVEIZQ classBody* LLAVEDER EOF
-     *     ;
+     * compilationUnit : accessModifier? CLASS nombre=ID (EXTENDS padre=ID)? LLAVEIZQ classBody* LLAVEDER EOF
+     * Como la regla tiene dos ID, ctx.ID() devuelve una lista; por eso se usan las
+     * etiquetas: ctx.nombre es la clase y ctx.padre la clase padre (null sin extends).
      *
-     * classBody tiene 3 alternativas ya etiquetadas (field/constructor/method), así
-     * que se despacha por {@code instanceof} en vez de por {@code visit(ctx)}: aquí
-     * hay que acumular en TRES listas distintas (atributos/constructores/métodos),
-     * no en un único resultado.
+     * classBody tiene 3 alternativas etiquetadas (field/constructor/method). Se despacha
+     * por instanceof porque hay que acumular en tres listas distintas. El modificador
+     * de acceso y la anotacion @Override se leen aqui (en classBody) y se le pasan a
+     * cada construirX, porque la gramatica los saco de las reglas de declaracion.
+     * @param ctx the parse tree
+     * @return
      */
     @Override
     public NodoAST visitCompilationUnitDef(GramaticaZ.CompilationUnitDefContext ctx) {
@@ -92,24 +95,32 @@ public class ASTBuilderZ extends GramaticaZBaseVisitor<NodoAST> {
     }
 
     /**
-     * constructorDeclaration
-     *     : ID LPAREN formalParameters? RPAREN block   #constructorDeclarationDef
-     *     ;
+     * constructorDeclaration : ID LPAREN formalParameters? RPAREN block   #constructorDeclarationDef
+     * El modificador llega desde classBody.
+     * @param mod
+     * @param ctx
+     * @return
      */
-    private Constructor construirConstructor(ModificadorAcceso mod, GramaticaZ.ConstructorDeclarationDefContext ctx) {
+    private Constructor construirConstructor(ModificadorAcceso mod,
+                                             GramaticaZ.ConstructorDeclarationDefContext ctx) {
         List<Parametro> parametros = construirParametros(ctx.formalParameters());
         Bloque cuerpo = construirBloque((GramaticaZ.BlockDefContext) ctx.block()); // única alt.
         return new Constructor(mod, ctx.ID().getText(), parametros, cuerpo, linea(ctx), columna(ctx));
     }
 
     /**
-     * methodDeclaration
-     *     : (tipo | VOID) nombreMiembro LPAREN formalParameters? RPAREN block   #methodDeclarationDef
-     *     ;
-     * Si la alternativa elegida fue VOID, {@code ctx.tipo() == null}: se guarda
-     * {@code tipoRetorno = null} (mismo criterio que Metodo.esVoid()).
+     * methodDeclaration : (tipo | VOID) nombreMiembro LPAREN formalParameters? RPAREN block   #methodDeclarationDef
+     * Si la alternativa fue VOID, ctx.tipo() es null y se guarda tipoRetorno = null (mismo criterio que Metodo.esVoid()).
+     * El modificador y la anotacion llegan desde classBody. De la anotacion solo se guarda el texto del ID (sin '@')
+     * y su posicion; que sea "Override" lo valida Metodo.verificar() para reportar el error en la linea de la anotacion.
+     * @param mod
+     * @param anot
+     * @param ctx
+     * @return
      */
-    private Metodo construirMetodo(ModificadorAcceso mod, GramaticaZ.OverrideAnnotationContext anot, GramaticaZ.MethodDeclarationDefContext ctx) {
+    private Metodo construirMetodo(ModificadorAcceso mod,
+                                   GramaticaZ.OverrideAnnotationContext anot,
+                                   GramaticaZ.MethodDeclarationDefContext ctx) {
         String anotacion = null;
         int lineaAnot = linea(ctx);
         int columnaAnot = columna(ctx);
@@ -744,6 +755,18 @@ public class ASTBuilderZ extends GramaticaZBaseVisitor<NodoAST> {
     public NodoAST visitPrimarioNull(GramaticaZ.PrimarioNullContext ctx) {
         // Específico de Z: el literal "null" mapea a CategoriaLiteral.NULO con valor null.
         return new Literal(null, CategoriaLiteral.NULO, linea(ctx), columna(ctx));
+    }
+
+    // this y super son primarias simples; el encadenamiento (this.x, super(args),
+    // super.metodo()) ya lo arman visitPrimarioCampo y visitPrimarioLlamada.
+    @Override
+    public NodoAST visitPrimarioThis(GramaticaZ.PrimarioThisContext ctx) {
+        return new This(linea(ctx), columna(ctx));
+    }
+
+    @Override
+    public NodoAST visitPrimarioSuper(GramaticaZ.PrimarioSuperContext ctx) {
+        return new Super(linea(ctx), columna(ctx));
     }
 
     @Override

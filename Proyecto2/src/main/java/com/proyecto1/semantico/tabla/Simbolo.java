@@ -1,6 +1,5 @@
 package com.proyecto1.semantico.tabla;
 
-import com.proyecto1.semantico.ast.z.ModificadorAcceso;
 import com.proyecto1.semantico.tipos.Tipo;
 
 import java.util.ArrayList;
@@ -32,13 +31,17 @@ public class Simbolo {
 
     /**
      * Cuántos elementos tiene cada dimensión, si el símbolo es un arreglo declarado con
-     * tamaño fijo (Y: "entero notas[5]"; Z: se calcula en tiempo de ejecución con "new").
+     * tamaño fijo (Y?: "entero notas[5]"; Z: se calcula en tiempo de ejecución con "new").
      */
     private final List<Integer> tamanosArreglo = new ArrayList<>();
 
     private boolean inicializado = false; // ¿ya se le asignó un valor al menos una vez?
 
-    // Fase 2: herencia, encapsulamiento y polimorfismo (solo clases de Zetariano).
+    /**
+     * Fase 2: herencia, encapsulamiento y polimorfismo (solo clases de Zetariano).
+     * Para cualquier otro simbolo estos campos quedan en su valor por defecto y no
+     * cambian el comportamiento de la Fase 1.
+     */
 
     // Modificador de acceso del miembro o de la clase. PUBLIC por defecto para que
     // los simbolos de Y? y PigLatin (que no tienen modificadores) sigan siendo visibles.
@@ -74,8 +77,7 @@ public class Simbolo {
      */
     private List<Simbolo> tablaVirtual;
 
-    // Solo para METODO: indice dentro de la tabla virtual de su clase (-1 si no es
-    // virtual: metodos private, que no se pueden sobrescribir).
+    // Solo para METODO: indice dentro de la tabla virtual de su clase (-1 si no es virtual: metodos private, que no se pueden sobrescribir).
     private int indiceVirtual = -1;
 
     public Simbolo(String nombre, CategoriaSimbolo categoria, Tipo tipo, int linea, int columna) {
@@ -142,6 +144,7 @@ public class Simbolo {
         return miembrosEnOrden;
     }
 
+    // Busca el miembro en esta clase y, si no esta, sube por la cadena de herencia.
     public Simbolo buscarMiembro(String nombre) {
         Simbolo actual = this;
         while (actual != null) {
@@ -158,6 +161,7 @@ public class Simbolo {
     }
 
     // --- Encapsulamiento ---
+
     public ModificadorAcceso getModificador() {
         return modificador;
     }
@@ -175,6 +179,7 @@ public class Simbolo {
     }
 
     // --- Herencia ---
+
     public String getNombreClasePadre() {
         return nombreClasePadre;
     }
@@ -248,7 +253,7 @@ public class Simbolo {
      *  1) se copia la del padre (mismos indices)
      *  2) cada metodo propio no private que tenga la misma firma que uno heredado reemplaza ese indice (sobrescritura)
      *  3) los metodos nuevos se agregan al final
-     *  El indice de cada metodo queda guardado en el propio simbolo (indiceVirtual).
+     * El indice de cada metodo queda guardado en el propio simbolo (indiceVirtual).
      * @return
      */
     public List<Simbolo> getTablaVirtual() {
