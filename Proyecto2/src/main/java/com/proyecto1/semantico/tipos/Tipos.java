@@ -25,6 +25,12 @@ public final class Tipos {
 
         if (origen == TipoPrimitivo.NULO) return true;   // lenguaje propio: null asignable a cualquier tipo
 
+        // Herencia: un objeto de la subclase se puede guardar donde se espera la
+        // superclase (Animal a = new Perro()). Al reves no: falta un cast.
+        if (destino instanceof TipoClase d && origen instanceof TipoClase o) {
+            return o.esSubtipoDe(d);
+        }
+
         // Arreglos: se exige tipo base idéntico y misma cantidad de niveles.
         if (destino instanceof TipoArreglo da && origen instanceof TipoArreglo oa) {
             return esAsignable(da.getBase(), oa.getBase());
@@ -83,7 +89,7 @@ public final class Tipos {
         return esDesconocido(t) || t.esNumerico();
     }
 
-    /** ¿t es un tipo válido para ser índice de arreglo (Y?/Z: siempre entero)? */
+    /** ¿t es un tipo válido para ser índice de arreglo (Y/Z: siempre entero)? */
     public static boolean esIndiceValido(Tipo t) {
         return esDesconocido(t) || t == TipoPrimitivo.ENTERO;
     }
