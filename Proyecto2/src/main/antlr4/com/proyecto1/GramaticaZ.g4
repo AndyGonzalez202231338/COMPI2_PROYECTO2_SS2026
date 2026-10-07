@@ -5,7 +5,17 @@ options {
 }
 
 compilationUnit
-    : PUBLIC CLASS ID LLAVEIZQ classBody* LLAVEDER EOF                   #compilationUnitDef
+    : accessModifier?  CLASS nombre=ID (EXTENDS padre=ID)? LLAVEIZQ classBody* LLAVEDER EOF                   #compilationUnitDef
+    ;
+
+accessModifier
+    : PUBLIC                                                             #accessPublic
+    | PRIVATE                                                            #accessPrivate
+    | PROTECTED                                                          #accessProtected
+    ;
+
+overrideAnnotation
+    : ARROBA ID                                                          #overrideAnnotationDef
     ;
 
 /** Solo campos, constructores y métodos (nada de código suelto);
@@ -14,9 +24,10 @@ compilationUnit
  sentencia fuera de compilationUnit/classBody.
 **/
 classBody
-    : fieldDeclaration                                                  #classBodyField
-    | constructorDeclaration                                            #classBodyConstructor
-    | methodDeclaration                                                 #classBodyMethod
+    : accessModifier? fieldDeclaration                                  #classBodyField
+    | accessModifier? constructorDeclaration                            #classBodyConstructor
+    // @Override solo aplica a metodos, nunca a campos ni constructores.
+    | overrideAnnotation? accessModifier? methodDeclaration             #classBodyMethod
     ;
 
 fieldDeclaration
@@ -24,11 +35,11 @@ fieldDeclaration
     ;
 
 constructorDeclaration
-    : PUBLIC ID LPAREN formalParameters? RPAREN block                    #constructorDeclarationDef
+    : ID LPAREN formalParameters? RPAREN block                    #constructorDeclarationDef
     ;
 
 methodDeclaration
-    : PUBLIC (tipo | VOID) nombreMiembro LPAREN formalParameters? RPAREN block  #methodDeclarationDef
+    : (tipo | VOID) nombreMiembro LPAREN formalParameters? RPAREN block  #methodDeclarationDef
     ;
 
 /** Nombre de miembro: ademas de ID acepta palabras reservadas que son exclusivas
@@ -229,6 +240,8 @@ primaryExpression
     | TRUE                                                               #primarioTrue
     | FALSE                                                              #primarioFalse
     | NULL                                                               #primarioNull
+    | THIS                                                               #primarioThis
+    | SUPER                                                              #primarioSuper
     | ID                                                                 #primarioIdentificador
     ;
 
