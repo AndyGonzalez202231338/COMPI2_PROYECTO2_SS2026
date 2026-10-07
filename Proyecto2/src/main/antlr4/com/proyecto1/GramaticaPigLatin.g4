@@ -119,6 +119,7 @@ declaracionVariable
 declaracionVariableSinPuntoYComa
     : ESTO ID DOSPUNTOS tipo expresion?                                   #declaracionVarConTipo
     | ESTO ID DOSPUNTOS ID inicializadorArreglo                           #declaracionVarEstructura
+    | ESTO nombre=ID DOSPUNTOS expresion DOSPUNTOS tipoDeclarado=ID       #declaracionVarObjetoTipado
     | ESTO ID DOSPUNTOS expresion                                         #declaracionVarSoloValor
     ;
 
