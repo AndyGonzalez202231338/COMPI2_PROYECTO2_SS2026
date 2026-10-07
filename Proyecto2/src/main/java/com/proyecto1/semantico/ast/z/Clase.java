@@ -20,17 +20,38 @@ public final class Clase extends NodoZ /* o la base que ya uses */ {
     private final List<Constructor> constructores;
     private final List<Metodo> metodos;
 
+    /**
+     * Fase 2: herencia y encapsulamiento.
+     * clasePadre es el ID que sigue a "extends"; null si la clase no hereda.
+     * modificador es el de la propia clase (public class / class -> DEFAULT).
+     */
+    private final String clasePadre;
+    private final ModificadorAcceso modificador;
+
+    // Constructor de la Fase 1: clase public sin herencia.
     public Clase(String nombre, List<Atributo> atributos,
                  List<Constructor> constructores, List<Metodo> metodos,
                  int linea, int columna) {
+        this(nombre, ModificadorAcceso.PUBLIC, null, atributos, constructores, metodos,
+                linea, columna);
+    }
+
+    public Clase(String nombre, ModificadorAcceso modificador, String clasePadre,
+                 List<Atributo> atributos, List<Constructor> constructores,
+                 List<Metodo> metodos, int linea, int columna) {
         super(linea, columna);
         this.nombre = nombre;
+        this.modificador = (modificador != null) ? modificador : ModificadorAcceso.DEFAULT;
+        this.clasePadre = clasePadre;
         this.atributos = atributos;
         this.constructores = constructores;
         this.metodos = metodos;
     }
 
     public String getNombre() { return nombre; }
+    public ModificadorAcceso getModificador() { return modificador; }
+    public String getClasePadre() { return clasePadre; }
+    public boolean tienePadre() { return clasePadre != null; }
     public List<Atributo> getAtributos() { return atributos; }
     public List<Constructor> getConstructores() { return constructores; }
     public List<Metodo> getMetodos() { return metodos; }

@@ -27,7 +27,7 @@ public class ASTBuilderZ extends GramaticaZBaseVisitor<NodoAST> {
 
     /**
      * compilationUnit
-     *     : PUBLIC CLASS ID LLAVEIZQ classBody* LLAVEDER EOF   #compilationUnitDef
+     *     : accessModifier? CLASS nombre=ID (EXTENDS padre=ID)? LLAVEIZQ classBody* LLAVEDER EOF
      *     ;
      *
      * classBody tiene 3 alternativas ya etiquetadas (field/constructor/method), así
@@ -44,18 +44,35 @@ public class ASTBuilderZ extends GramaticaZBaseVisitor<NodoAST> {
         for (GramaticaZ.ClassBodyContext body : ctx.classBody()) {
             if (body instanceof GramaticaZ.ClassBodyFieldContext cf) {
                 atributos.add(construirAtributo(
+                        modificador(cf.accessModifier()),
                         (GramaticaZ.FieldDeclarationDefContext) cf.fieldDeclaration()));
             } else if (body instanceof GramaticaZ.ClassBodyConstructorContext cc) {
                 constructores.add(construirConstructor(
+                        modificador(cc.accessModifier()),
                         (GramaticaZ.ConstructorDeclarationDefContext) cc.constructorDeclaration()));
             } else if (body instanceof GramaticaZ.ClassBodyMethodContext cm) {
                 metodos.add(construirMetodo(
+                        modificador(cm.accessModifier()),
+                        cm.overrideAnnotation(),
                         (GramaticaZ.MethodDeclarationDefContext) cm.methodDeclaration()));
             }
         }
 
-        return new Clase(ctx.ID().getText(), atributos, constructores, metodos,
-                linea(ctx), columna(ctx));
+        String nombre = ctx.nombre.getText();
+        String padre  = (ctx.padre == null) ? null : ctx.padre.getText();
+
+        return new Clase(nombre, modificador(ctx.accessModifier()), padre,
+                atributos, constructores, metodos, linea(ctx), columna(ctx));
+    }
+
+    // accessModifier : PUBLIC #accessPublic | PRIVATE #accessPrivate | PROTECTED #accessProtected
+    // Si el contexto es null (no se escribio modificador) el miembro es DEFAULT.
+    private ModificadorAcceso modificador(GramaticaZ.AccessModifierContext ctx) {
+        if (ctx == null) return ModificadorAcceso.DEFAULT;
+        if (ctx instanceof GramaticaZ.AccessPublicContext)    return ModificadorAcceso.PUBLIC;
+        if (ctx instanceof GramaticaZ.AccessPrivateContext)   return ModificadorAcceso.PRIVATE;
+        if (ctx instanceof GramaticaZ.AccessProtectedContext) return ModificadorAcceso.PROTECTED;
+        return ModificadorAcceso.DEFAULT;
     }
 
     /**
@@ -63,41 +80,53 @@ public class ASTBuilderZ extends GramaticaZBaseVisitor<NodoAST> {
      * Comparte la regla "declaracion" con declarationStatement, pero aquí el nodo
      * que se construye es un Atributo (miembro de clase), no una instrucción.
      */
-    private Atributo construirAtributo(GramaticaZ.FieldDeclarationDefContext ctx) {
+    private Atributo construirAtributo(ModificadorAcceso mod,
+                                       GramaticaZ.FieldDeclarationDefContext ctx) {
         GramaticaZ.DeclaracionDefContext decl =
                 (GramaticaZ.DeclaracionDefContext) ctx.declaracion(); // única alternativa
         NodoTipoRef tipo = construirTipoRef((GramaticaZ.TipoDefContext) decl.tipo());
         ExpresionZ inicializador = (decl.expression() == null)
                 ? null
                 : construirExpresion(decl.expression());
-        return new Atributo(tipo, decl.ID().getText(), inicializador, linea(ctx), columna(ctx));
+        return new Atributo(mod, tipo, decl.ID().getText(), inicializador, linea(ctx), columna(ctx));
     }
 
     /**
      * constructorDeclaration
-     *     : PUBLIC ID LPAREN formalParameters? RPAREN block   #constructorDeclarationDef
+     *     : ID LPAREN formalParameters? RPAREN block   #constructorDeclarationDef
      *     ;
      */
-    private Constructor construirConstructor(GramaticaZ.ConstructorDeclarationDefContext ctx) {
+    private Constructor construirConstructor(ModificadorAcceso mod, GramaticaZ.ConstructorDeclarationDefContext ctx) {
         List<Parametro> parametros = construirParametros(ctx.formalParameters());
         Bloque cuerpo = construirBloque((GramaticaZ.BlockDefContext) ctx.block()); // única alt.
-        return new Constructor(ctx.ID().getText(), parametros, cuerpo, linea(ctx), columna(ctx));
+        return new Constructor(mod, ctx.ID().getText(), parametros, cuerpo, linea(ctx), columna(ctx));
     }
 
     /**
      * methodDeclaration
-     *     : PUBLIC (tipo | VOID) ID LPAREN formalParameters? RPAREN block   #methodDeclarationDef
+     *     : (tipo | VOID) nombreMiembro LPAREN formalParameters? RPAREN block   #methodDeclarationDef
      *     ;
      * Si la alternativa elegida fue VOID, {@code ctx.tipo() == null}: se guarda
      * {@code tipoRetorno = null} (mismo criterio que Metodo.esVoid()).
      */
-    private Metodo construirMetodo(GramaticaZ.MethodDeclarationDefContext ctx) {
+    private Metodo construirMetodo(ModificadorAcceso mod, GramaticaZ.OverrideAnnotationContext anot, GramaticaZ.MethodDeclarationDefContext ctx) {
+        String anotacion = null;
+        int lineaAnot = linea(ctx);
+        int columnaAnot = columna(ctx);
+        if (anot instanceof GramaticaZ.OverrideAnnotationDefContext a) {
+            anotacion = a.ID().getText();
+            lineaAnot = linea(a);
+            columnaAnot = columna(a);
+        }
+
         NodoTipoRef tipoRetorno = (ctx.tipo() == null)
                 ? null
                 : construirTipoRef((GramaticaZ.TipoDefContext) ctx.tipo());
         List<Parametro> parametros = construirParametros(ctx.formalParameters());
         Bloque cuerpo = construirBloque((GramaticaZ.BlockDefContext) ctx.block());
-        return new Metodo(ctx.nombreMiembro().getText(), parametros, tipoRetorno, cuerpo, linea(ctx), columna(ctx));
+        return new Metodo(mod, anotacion, lineaAnot, columnaAnot,
+                ctx.nombreMiembro().getText(), parametros, tipoRetorno, cuerpo,
+                linea(ctx), columna(ctx));
     }
 
     /**

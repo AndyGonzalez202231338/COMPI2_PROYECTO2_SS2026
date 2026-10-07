@@ -42,15 +42,26 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
     private AmbitoFuncion ambitoPropio;
     private String nombreClaseReal;
 
+    // Fase 2: modificador de acceso; DEFAULT si no se escribio ninguno.
+    private final ModificadorAcceso modificador;
+
+    // Constructor de la Fase 1: constructor public.
     public Constructor(String nombre, List<Parametro> parametros, Bloque cuerpo,
                        int linea, int columna) {
+        this(ModificadorAcceso.PUBLIC, nombre, parametros, cuerpo, linea, columna);
+    }
+
+    public Constructor(ModificadorAcceso modificador, String nombre, List<Parametro> parametros,
+                       Bloque cuerpo, int linea, int columna) {
         super(linea, columna);
+        this.modificador = (modificador != null) ? modificador : ModificadorAcceso.DEFAULT;
         this.nombre = nombre;
         this.parametros = parametros;
         this.cuerpo = cuerpo;
     }
 
     public String getNombre() { return nombre; }
+    public ModificadorAcceso getModificador() { return modificador; }
     public List<Parametro> getParametros() { return parametros; }
     public Bloque getCuerpo() { return cuerpo; }
     public AmbitoFuncion getAmbitoPropio() { return ambitoPropio; }
@@ -61,9 +72,11 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
      * para que generarC3D() lo reutilice.
      */
     public Tipo verificar(AmbitoClase ambClase, ManejadorErrores errores) {
-        // (1) Guardar el nombre REAL de la clase para usarlo al generar la etiqueta C3D.
-        //     El error por nombre incorrecto YA se reportó en AnalizadorSemanticoZ;
-        //     aquí no se vuelve a chequear (evita el mensaje duplicado).
+        /**
+         * (1) Guardar el nombre REAL de la clase para usarlo al generar la etiqueta C3D.
+         * El error por nombre incorrecto YA se reportó en AnalizadorSemanticoZ;
+         * aquí no se vuelve a chequear (evita el mensaje duplicado).
+         */
         this.nombreClaseReal = ambClase.getSimboloContenedor().getNombre();
 
         // (2) Lookup con clave específica: nombreClaseReal#aridad#Tipo1#Tipo2...

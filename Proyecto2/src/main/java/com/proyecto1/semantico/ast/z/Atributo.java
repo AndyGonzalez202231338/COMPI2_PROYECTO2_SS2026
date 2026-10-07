@@ -18,11 +18,25 @@ public final class Atributo extends NodoZ {
     private final String nombre;
     private final ExpresionZ inicializador; // null si no hay "= expresion"
 
+    // Fase 2: modificador de acceso; DEFAULT si no se escribio ninguno.
+    private final ModificadorAcceso modificador;
+
+    // Constructor de la Fase 1: atributo public.
     public Atributo(NodoTipoRef tipo, String nombre, ExpresionZ inicializador, int linea, int columna) {
+        this(ModificadorAcceso.PUBLIC, tipo, nombre, inicializador, linea, columna);
+    }
+
+    public Atributo(ModificadorAcceso modificador, NodoTipoRef tipo, String nombre,
+                    ExpresionZ inicializador, int linea, int columna) {
         super(linea, columna);
+        this.modificador = (modificador != null) ? modificador : ModificadorAcceso.DEFAULT;
         this.tipo = tipo;
         this.nombre = nombre;
         this.inicializador = inicializador;
+    }
+
+    public ModificadorAcceso getModificador() {
+        return modificador;
     }
 
     public NodoTipoRef getTipo() {
@@ -57,7 +71,7 @@ public final class Atributo extends NodoZ {
             Tipo tInit = inicializador.verificar(amb, errores);
             if (!Tipos.esAsignable(t, tInit))
                 errores.reportar(linea, columna,
-                        "Inicialización incompatible: " + tInit.nombre() + " → " + t.nombre());
+                        "Inicialización incompatible: " + tInit.nombre() + " -> " + t.nombre());
         }
     }
 }
