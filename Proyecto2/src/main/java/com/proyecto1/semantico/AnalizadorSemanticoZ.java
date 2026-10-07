@@ -20,14 +20,14 @@ public class AnalizadorSemanticoZ {
 
     /**
      * Orden del analisis de una clase:
-     *      1) firma: el nombre de la clase en el ambito global
-     *      2) miembros: atributos, metodos y constructores propios
-     *      3) herencia: enlazar la clase padre. Despues se reintentan los enlaces pendientes
-     *         de las clases hermanas, porque alguna puede heredar justo de esta clase (que
-     *         se registra al final, despues de todas las hermanas)
-     *      4) validaciones de herencia/polimorfismo: modificador de la clase, atributos que
-     *         ocultan a los del padre, @Override, y construccion de la tabla virtual
-     *      5) cuerpos de atributos, metodos y constructores
+     *   1) firma: el nombre de la clase en el ambito global
+     *   2) miembros: atributos, metodos y constructores propios
+     *   3) herencia: enlazar la clase padre. Despues se reintentan los enlaces pendientes
+     *      de las clases hermanas, porque alguna puede heredar justo de esta clase (que
+     *      se registra al final, despues de todas las hermanas)
+     *   4) validaciones de herencia/polimorfismo: modificador de la clase, atributos que
+     *      ocultan a los del padre, @Override, y construccion de la tabla virtual
+     *   5) cuerpos de atributos, metodos y constructores
      * @param clase
      * @param global
      * @return
@@ -46,6 +46,7 @@ public class AnalizadorSemanticoZ {
         enlazarPendientes(global);
 
         validarModificadorDeClase(clase, errores);
+        validarClassIdUnico(sClase, global, errores);
         validarAtributosOcultos(clase, sClase, errores);
         validarSobrescrituras(clase, sClase, errores);
         sClase.getTablaVirtual(); // deja los indices virtuales calculados para el C3D
@@ -64,6 +65,7 @@ public class AnalizadorSemanticoZ {
                 null, clase.getLinea(), clase.getColumna());
         sClase.setModificador(clase.getModificador());
         sClase.setNombreClasePadre(clase.getClasePadre());
+        sClase.setClassId(idDeClase(clase.getNombre()));
         if (!global.declarar(sClase)) {
             errores.reportar(clase.getLinea(), clase.getColumna(),
                     "Clase duplicada: '" + clase.getNombre() + "'");
@@ -109,11 +111,8 @@ public class AnalizadorSemanticoZ {
             } else {
                 sClase.getMetodosDeclarados().add(sm);
             }
-            /**
-             * Clave GENÉRICA (nombre#aridad): primer método con esa aridad "gana".
-             * Sirve solo como fallback para emitir "argumento incompatible" con la
-             * firma más parecida cuando el match exacto por tipos falle.
-             */
+            // Clave GENÉRICA (nombre#aridad): primer método con esa aridad "gana".
+            // Sirve solo como fallback para emitir "argumento incompatible" con la firma más parecida cuando el match exacto por tipos falle.
             ambClase.declararMiembroConClave(m.getNombre() + "#" + m.getParametros().size(), sm);
         }
 
@@ -128,8 +127,7 @@ public class AnalizadorSemanticoZ {
                                 + "', no '" + c.getNombre() + "'");
             }
 
-            // Se registra bajo el NOMBRE DE LA CLASE (no el declarado) para que
-            // "new NombreClase(...)" resuelva aunque el usuario se equivoque al nombrar.
+            // Se registra bajo el NOMBRE DE LA CLASE (no el declarado) para que "new NombreClase(...)" resuelva aunque el usuario se equivoque al nombrar.
             Simbolo sc = new Simbolo(nombreClase, CategoriaSimbolo.CONSTRUCTOR,
                     null, c.getLinea(), c.getColumna());
             sc.setModificador(c.getModificador());
@@ -150,16 +148,14 @@ public class AnalizadorSemanticoZ {
         return ambClase;
     }
 
-
     // HERENCIA
 
     /**
      * Enlaza la clase con su padre ("extends X"). Errores posibles:
-     *  - la clase padre no existe (o no es una clase)
-     *  - la clase hereda de si misma
-     *  - herencia ciclica (A extends B, B extends A)
-     * Si hay error no se enlaza: la clase se analiza como si no heredara, para no
-     * generar errores en cascada ni ciclos infinitos al buscar miembros.
+     *   - la clase padre no existe (o no es una clase)
+     *   - la clase hereda de si misma
+     *   - herencia ciclica (A extends B, B extends A)
+     * Si hay error no se enlaza: la clase se analiza como si no heredara, para no generar errores en cascada ni ciclos infinitos al buscar miembros.
      * @param sClase
      * @param global
      * @param errores
@@ -184,6 +180,7 @@ public class AnalizadorSemanticoZ {
                     "La clase padre '" + nombrePadre + "' de '" + sClase.getNombre() + "' no existe");
             return false;
         }
+
         /**
          * Ciclo: se sube desde el padre siguiendo los NOMBRES declarados en "extends" (no
          * los enlaces), porque alguna clase de la cadena puede tener su enlace pendiente
@@ -218,6 +215,40 @@ public class AnalizadorSemanticoZ {
         for (Simbolo s : global.simbolosLocales()) {
             if (s.getCategoria() == CategoriaSimbolo.CLASE && s.tieneHerenciaPendiente()) {
                 enlazarHerencia(s, global, descartable);
+            }
+        }
+    }
+
+    // CLASS_ID (dispatch dinamico)
+
+    /**
+     * Identificador en tiempo de ejecucion de una clase, calculado solo a partir de su nombre.
+     * Por que no un contador (0, 1, 2...): cada archivo .z se compila por separado, con su
+     * propio analisis y su propio generador. Un contador daria numeros distintos segun el
+     * orden en que cada compilacion vea las clases, y entonces Perro_init (compilado en
+     * Perro.z) podria escribir un _class_id distinto del que compara el dispatch generado
+     * en Uso.z. Derivado del nombre, el id es el mismo en todas las unidades y no cambia
+     * si se agregan o quitan otras clases del proyecto.
+     * @param nombre
+     * @return
+     */
+    public static int idDeClase(String nombre) {
+        int h = 0x811C9DC5;
+        for (int i = 0; i < nombre.length(); i++) {
+            h ^= nombre.charAt(i);
+            h *= 0x01000193;
+        }
+        return h & 0x7FFFFFFF;
+    }
+
+    // Dos clases con el mismo id harian que el dispatch confunda sus objetos.
+    private void validarClassIdUnico(Simbolo sClase, AmbitoGlobal global, ManejadorErrores errores) {
+        for (Simbolo otra : global.simbolosLocales()) {
+            if (otra != sClase && otra.getCategoria() == CategoriaSimbolo.CLASE
+                    && otra.getClassId() == sClase.getClassId()) {
+                errores.reportar(sClase.getLinea(), sClase.getColumna(),
+                        "Las clases '" + sClase.getNombre() + "' y '" + otra.getNombre()
+                                + "' tienen el mismo identificador interno; cambie el nombre de una de ellas");
             }
         }
     }
@@ -257,13 +288,12 @@ public class AnalizadorSemanticoZ {
      * Reglas de polimorfismo para cada metodo propio:
      *  Con @Override:
      *      - la clase debe heredar de alguna
-     *      - debe existir en la cadena de herencia un metodo con la misma firma (nombre + tipos de parametros)
-     *      - ese metodo no puede ser private (no se hereda, no se puede sobrescribir)
-     *      - el tipo de retorno debe ser el mismo (o una subclase, retorno covariante)
-     *      - no puede reducir la visibilidad (public -> private, por ejemplo)
+     *       - debe existir en la cadena de herencia un metodo con la misma firma (nombre + tipos de parametros)
+     *       - ese metodo no puede ser private (no se hereda, no se puede sobrescribir)
+     *       - el tipo de retorno debe ser el mismo (o una subclase, retorno covariante)
+     *       - no puede reducir la visibilidad (public -> private, por ejemplo)
      *  Sin @Override:
-     *      - si el metodo sobrescribe a uno heredado es error: el enunciado pide la
-     *      anotacion como obligatoria para definir polimorfismo
+     *       - si el metodo sobrescribe a uno heredado es error: el enunciado pide la anotacion como obligatoria para definir polimorfismo
      * @param clase
      * @param sClase
      * @param errores

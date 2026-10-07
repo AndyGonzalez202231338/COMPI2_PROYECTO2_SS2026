@@ -77,6 +77,14 @@ public final class CargadorClasesZ {
             analizador.registrarMiembros(entrada.getKey(), entrada.getValue(), global, descartable);
         }
 
+        // Ronda 3: herencia entre hermanas. Se hace al final para que el orden de los
+        // archivos no importe (una hija puede aparecer antes que su padre). Si la clase
+        // padre es justo la del archivo actual, el enlace queda pendiente y lo completa
+        // AnalizadorSemanticoZ.analizar cuando registra esa clase.
+        for (Simbolo simbolo : registradas.values()) {
+            analizador.enlazarHerencia(simbolo, global, descartable);
+        }
+
         return global;
     }
 

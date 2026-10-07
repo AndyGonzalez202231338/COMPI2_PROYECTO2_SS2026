@@ -52,8 +52,8 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
 
     /**
      * Fase 2: llamada al constructor del padre, resuelta por verificar().
-     *  superExplicito -> "super(args);" escrito como primera sentencia del cuerpo
-     *  superImplicito -> constructor sin parametros del padre, cuando no se escribio super(...)
+     *      superExplicito -> "super(args);" escrito como primera sentencia del cuerpo\
+     *      superImplicito -> constructor sin parametros del padre, cuando no se escribio super(...)
      * A lo sumo uno de los dos es distinto de null, y ambos son null si la clase no hereda.
      */
     private Llamada superExplicito;
@@ -98,8 +98,8 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
     public Tipo verificar(AmbitoClase ambClase, ManejadorErrores errores) {
         /**
          * (1) Guardar el nombre REAL de la clase para usarlo al generar la etiqueta C3D.
-         *     El error por nombre incorrecto YA se reportó en AnalizadorSemanticoZ;
-         *     aquí no se vuelve a chequear (evita el mensaje duplicado).
+         *      El error por nombre incorrecto YA se reportó en AnalizadorSemanticoZ;
+         *      aquí no se vuelve a chequear (evita el mensaje duplicado).
          */
         this.nombreClaseReal = ambClase.getSimboloContenedor().getNombre();
 
@@ -240,6 +240,20 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
                     superImplicito.getClaseDuena().getNombre(), new ArrayList<>());
             generador.emitirParam("this");
             generador.emitirCall(etiquetaPadre, 1, null);
+        }
+
+        /**
+         * Campo oculto _class_id (posicion 0 del objeto): la clase REAL del objeto, que es
+         * lo que compara el dispatch dinamico. Se escribe DESPUES de la llamada al
+         * constructor del padre porque ese constructor tambien escribe su propio id: al
+         * crear un Cachorro se ejecuta Animal_init (escribe Animal), luego Perro_init
+         * (escribe Perro) y por ultimo Cachorro_init, que deja el valor final correcto.
+         * Consecuencia: mientras corre el constructor del padre, el objeto todavia figura
+         * como de la clase padre (en Java ya figuraria como la hija).
+         */
+        if (simboloClase != null && simboloClase.getClassId() >= 0) {
+            generador.emitirGuardarCampo("this", GeneradorC3D.CAMPO_CLASS_ID,
+                    String.valueOf(simboloClase.getClassId()));
         }
 
         for (Atributo a : atributosClase) {

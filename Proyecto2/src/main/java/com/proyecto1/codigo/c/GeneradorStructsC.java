@@ -58,7 +58,20 @@ public final class GeneradorStructsC {
             sb.append("struct ").append(s.getNombre()).append(" {\n");
 
             boolean hayCampos = false;
-            for (Simbolo m : s.getMiembrosEnOrden()) {
+
+            // Fase 2 (clases de Z): mismo layout que el objeto en heap.
+            //   _class_id primero (lo escribe cada constructor, lo lee el dispatch)
+            //   despues los atributos heredados y al final los propios
+            // Sin _class_id en el struct, el "this->_class_id = ..." que emite todo
+            // constructor no compilaria, aunque la clase no use herencia.
+            List<Simbolo> campos = s.getMiembrosEnOrden();
+            if (s.getCategoria() == CategoriaSimbolo.CLASE) {
+                sb.append("    int _class_id;\n");
+                hayCampos = true;
+                campos = s.getAtributosConHerencia();
+            }
+
+            for (Simbolo m : campos) {
                 if (!esCampo(m)) continue;
                 hayCampos = true;
                 sb.append("    ").append(campoAC(m)).append(";\n");

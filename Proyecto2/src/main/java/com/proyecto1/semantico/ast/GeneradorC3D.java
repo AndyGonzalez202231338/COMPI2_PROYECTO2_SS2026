@@ -2,7 +2,10 @@ package com.proyecto1.semantico.ast;
 
 import com.proyecto1.semantico.ast.cuadruplas.*;
 import com.proyecto1.semantico.tabla.Ambito;
+import com.proyecto1.semantico.tabla.CategoriaSimbolo;
+import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
+import com.proyecto1.semantico.tipos.TipoPrimitivo;
 
 import java.util.*;
 
@@ -77,6 +80,13 @@ public class GeneradorC3D {
      */
     public record Firma(String etiqueta, List<ParametroFirma> parametros, Tipo tipoRetorno, boolean esMetodo) {}
 
+    // Fase 2: una entrada del dispatch dinamico. Un objeto cuya clase real tiene este
+    // classId debe ejecutar la funcion "etiqueta".
+    public record EntradaDispatch(int classId, String nombreClase, String etiqueta) {}
+
+    // Nombre del campo oculto donde cada objeto guarda el id de su clase real.
+    public static final String CAMPO_CLASS_ID = "_class_id";
+
     public GeneradorC3D() {
         this(null, new TablaCuadruplas());
     }
@@ -123,6 +133,81 @@ public class GeneradorC3D {
     /** Restaura el ámbito devuelto por entrarAmbito(Ambito). */
     public void salirAmbito(Ambito anterior) {
         this.ambito = anterior;
+    }
+
+    // ---------- Dispatch dinamico (Fase 2) ----------
+
+    /**
+     * Para una llamada "obj.metodo(...)" donde obj tiene tipo declarado "claseEstatica",
+     * devuelve que funcion ejecutar segun la clase real del objeto: una entrada por cada
+     * clase que puede estar detras de esa referencia (claseEstatica y todas sus subclases).
+     * Se calcula desde la tabla de simbolos y no desde un registro que se llene al generar
+     * cada clase: cada archivo .z tiene su propio GeneradorC3D, asi que al compilar Uso.z
+     * nunca se generan Perro ni Cachorro, pero sus simbolos (con su tabla virtual) si estan
+     * en el ambito global gracias a CargadorClasesZ.
+     * Como se elige la funcion: el metodo ocupa un indice en la tabla virtual de
+     * claseEstatica; cada subclase tiene en ese mismo indice su version (la propia si lo
+     * sobrescribe o la heredada si no). La etiqueta se arma con la clase que DECLARA esa version.
+     * @param claseEstatica
+     * @param metodo
+     * @return
+     */
+    public List<EntradaDispatch> dispatchPara(Simbolo claseEstatica, Simbolo metodo) {
+        List<EntradaDispatch> entradas = new ArrayList<>();
+        if (ambito == null || claseEstatica == null || metodo == null) return entradas;
+
+        int indice = indiceEnTablaVirtual(claseEstatica, metodo);
+        if (indice < 0) return entradas;
+
+        for (Simbolo s : ambito.ambitoGlobal().simbolosLocales()) {
+            if (s.getCategoria() != CategoriaSimbolo.CLASE || !s.esSubclaseDe(claseEstatica)) continue;
+            List<Simbolo> tabla = s.getTablaVirtual();
+            if (indice >= tabla.size()) continue;
+            Simbolo impl = tabla.get(indice);
+            entradas.add(new EntradaDispatch(s.getClassId(), s.getNombre(), etiquetaDe(impl)));
+        }
+        entradas.sort((a, b) -> a.nombreClase().compareTo(b.nombreClase()));
+        return entradas;
+    }
+
+    /**
+     * Hace falta dispatch solo si hay mas de una implementacion distinta. Si ninguna
+     * subclase sobrescribe el metodo, todas las entradas apuntan a la misma etiqueta y
+     * alcanza con un call directo (igual que en la Fase 1).
+     * @param entradas
+     * @return
+     */
+    public static boolean necesitaDispatch(List<EntradaDispatch> entradas) {
+        Set<String> distintas = new HashSet<>();
+        for (EntradaDispatch e : entradas) distintas.add(e.etiqueta());
+        return distintas.size() > 1;
+    }
+
+    // Etiqueta C3D de un metodo, con la clase que lo declara (misma que usa Metodo.generarC3D).
+    public static String etiquetaDe(Simbolo metodo) {
+        List<Tipo> tipos = new ArrayList<>();
+        for (Simbolo p : metodo.getParametros()) {
+            tipos.add(p.getTipo() != null ? p.getTipo() : TipoPrimitivo.DESCONOCIDO);
+        }
+        String clase = (metodo.getClaseDuena() != null) ? metodo.getClaseDuena().getNombre() : "?";
+        return etiquetaMetodo(clase, metodo.getNombre(), tipos);
+    }
+
+    /**
+     * Indice del metodo en la tabla virtual de la clase, buscado por firma. No se usa directamente
+     * metodo.getIndiceVirtual() porque ese valor se fija recien cuando se construye la tabla
+     * de la clase duena, y aqui esa clase puede ser una hermana cuya tabla todavia no se pidio.
+     * @param clase
+     * @param metodo
+     * @return
+     */
+    private static int indiceEnTablaVirtual(Simbolo clase, Simbolo metodo) {
+        List<Simbolo> tabla = clase.getTablaVirtual();
+        String firma = metodo.firma();
+        for (int i = 0; i < tabla.size(); i++) {
+            if (tabla.get(i).firma().equals(firma)) return i;
+        }
+        return -1;
     }
 
     // ---------- Contexto de clase (para mangling de métodos) ----------

@@ -10,22 +10,25 @@ import com.proyecto1.semantico.tipos.TipoPrimitivo;
 import com.proyecto1.semantico.tipos.Tipos;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * primaryExpression LPAREN argumentList? RPAREN (#primarioLlamada).
  * Formas que cubre segun el objetivo:
- *      metodo(args)         objetivo = Identificador   metodo de la clase actual (o heredado)
- *      obj.metodo(args)     objetivo = AccesoCampo     metodo de otro objeto
- *      super.metodo(args)   objetivo = AccesoCampo(Super, ...)  version del padre
- *      super(args)          objetivo = Super           constructor del padre
+ *   metodo(args)         objetivo = Identificador   metodo de la clase actual (o heredado)
+ *   obj.metodo(args)     objetivo = AccesoCampo     metodo de otro objeto
+ *   super.metodo(args)   objetivo = AccesoCampo(Super, ...)  version del padre
+ *   super(args)          objetivo = Super           constructor del padre
  * Fase 2:
- *      - Los metodos se resuelven con ResolucionMiembros: busca en la cadena de herencia
- *        y acepta argumentos que sean subclases del parametro.
- *      - Se valida el encapsulamiento del metodo desde la clase actual.
- *      - La etiqueta C3D se arma con la clase que DECLARA el metodo (claseDuena), no con
- *        el tipo del objeto: si Perro hereda comer() de Animal, la funcion que existe es Animal_comer, no Perro_comer.
- *      - Se deja registrado si la llamada debe despacharse en forma dinamica (ver esDespachoDinamico) junto con el indice en la tabla virtual.
+ *  - Los metodos se resuelven con ResolucionMiembros: busca en la cadena de herencia
+ *    y acepta argumentos que sean subclases del parametro.
+ *  - Se valida el encapsulamiento del metodo desde la clase actual.
+ *  - La etiqueta C3D se arma con la clase que DECLARA el metodo (claseDuena), no con
+ *    el tipo del objeto: si Perro hereda comer() de Animal, la funcion que existe es Animal_comer, no Perro_comer.
+ *  - Se deja registrado si la llamada debe despacharse en forma dinamica (ver
+ *    esDespachoDinamico) junto con el indice en la tabla virtual.
  */
 public final class Llamada extends NodoZ implements ExpresionZ {
 
@@ -42,6 +45,10 @@ public final class Llamada extends NodoZ implements ExpresionZ {
     // false cuando la llamada va a una implementacion fija: super.metodo(), super(args)
     // y metodos private (no se pueden sobrescribir). true en el resto de casos.
     private boolean despachoDinamico = false;
+
+    // Tipo DECLARADO del receptor (la clase actual en "metodo(args)", el tipo de obj en
+    // "obj.metodo(args)"). El dispatch considera esta clase y todas sus subclases.
+    private Simbolo claseReceptor;
 
     public Llamada(ExpresionZ objetivo, List<ExpresionZ> argumentos, int linea, int columna) {
         super(linea, columna);
@@ -64,9 +71,8 @@ public final class Llamada extends NodoZ implements ExpresionZ {
 
     /**
      * Polimorfismo: true si en tiempo de ejecucion hay que elegir la implementacion
-     * segun la clase real del objeto, usando getIndiceVirtual() sobre su tabla virtual.
-     * El C3D todavia llama a la implementacion de la clase declarada; este dato es
-     * el que necesita el backend para hacer el despacho dinamico.
+     * segun la clase real del objeto. generarC3D lo usa para emitir el if-chain por
+     * _class_id (solo si de verdad hay mas de una implementacion posible).
      * @return
      */
     public boolean esDespachoDinamico() {
@@ -110,6 +116,7 @@ public final class Llamada extends NodoZ implements ExpresionZ {
                 return TipoPrimitivo.DESCONOCIDO;
             }
             this.simboloMetodo = m;
+            this.claseReceptor = clase;
             Acceso.verificar(m, ambito, errores, linea, columna);
             this.despachoDinamico = esVirtual(m);
             return verificarArgumentosYRetorno(m, tiposArgs, errores);
@@ -134,6 +141,7 @@ public final class Llamada extends NodoZ implements ExpresionZ {
                 return TipoPrimitivo.DESCONOCIDO;
             }
             this.simboloMetodo = m;
+            this.claseReceptor = tc.getDefinicion();
             Acceso.verificar(m, ambito, errores, linea, columna);
             // super.metodo() llama siempre a la version del padre: despacho estatico.
             this.despachoDinamico = !(ac.getObjeto() instanceof Super) && esVirtual(m);
@@ -242,13 +250,7 @@ public final class Llamada extends NodoZ implements ExpresionZ {
             lugaresArgs.add(v.getLugar());
         }
 
-        // 3) Bloque de params: receptor + args en orden.
-        generador.emitirParam(receptor);
-        for (String lugar : lugaresArgs) {
-            generador.emitirParam(lugar);
-        }
-
-        // 4) Etiqueta. Tipos FORMALES del simbolo resuelto (excluye "this").
+        // 3) Etiqueta. Tipos FORMALES del simbolo resuelto (excluye "this").
         List<Tipo> tiposFormales = new ArrayList<>();
         if (simboloMetodo != null) {
             for (Simbolo p : simboloMetodo.getParametros()) {
@@ -260,6 +262,7 @@ public final class Llamada extends NodoZ implements ExpresionZ {
         if (objetivo instanceof Super) {
             String padre = claseDe(simboloMetodo, "?");
             etiqueta = GeneradorC3D.etiquetaConstructor(padre, tiposFormales);
+            emitirParams(generador, receptor, lugaresArgs);
             generador.emitirCall(etiqueta, argumentos.size() + 1, null);
             return ResultadoC3D.vacio();
         }
@@ -275,17 +278,92 @@ public final class Llamada extends NodoZ implements ExpresionZ {
         boolean esVoid = (simboloMetodo != null
                 && simboloMetodo.getTipo() != null
                 && simboloMetodo.getTipo().esVoid());
-
-        if (esVoid) {
-            generador.emitirCall(etiqueta, argumentos.size() + 1, null);
-            return ResultadoC3D.vacio();
-        }
-        String t = generador.nuevoTemporal();
-        generador.emitirCall(etiqueta, argumentos.size() + 1, t);
         Tipo tipo = (simboloMetodo != null && simboloMetodo.getTipo() != null)
                 ? simboloMetodo.getTipo()
                 : TipoPrimitivo.DESCONOCIDO;
-        return ResultadoC3D.temporal(t, tipo);
+        String resultado = esVoid ? null : generador.nuevoTemporal();
+
+        // 4) Dispatch dinamico si alguna subclase del tipo declarado sobrescribe el metodo.
+        if (despachoDinamico) {
+            List<GeneradorC3D.EntradaDispatch> entradas =
+                    generador.dispatchPara(claseReceptor, simboloMetodo);
+            if (GeneradorC3D.necesitaDispatch(entradas)) {
+                emitirDispatch(generador, receptor, lugaresArgs, entradas, etiqueta, resultado);
+                return (resultado == null) ? ResultadoC3D.vacio() : ResultadoC3D.temporal(resultado, tipo);
+            }
+        }
+
+        // 5) Call directo (Fase 1): metodo no virtual o nadie lo sobrescribe.
+        emitirParams(generador, receptor, lugaresArgs);
+        generador.emitirCall(etiqueta, argumentos.size() + 1, resultado);
+        return (resultado == null) ? ResultadoC3D.vacio() : ResultadoC3D.temporal(resultado, tipo);
+    }
+
+    // param receptor; param arg1; ... param argN
+    // Los params tienen que ir pegados a su call, por eso se repiten en cada caso del dispatch.
+    private static void emitirParams(GeneradorC3D generador, String receptor, List<String> lugaresArgs) {
+        generador.emitirParam(receptor);
+        for (String lugar : lugaresArgs) {
+            generador.emitirParam(lugar);
+        }
+    }
+
+    /**
+     * Dispatch dinamico con if-chain (el C3D no tiene punteros a funcion: todo call lleva
+     * una etiqueta fija). El receptor y los argumentos ya estan evaluados, una sola vez.
+     *      tc = receptor._class_id
+     *      tk = tc == idPerro
+     *      if_true tk goto Lperro          una comparacion por cada clase que NO usa
+     *      tk = tc == idCachorro           la implementacion por defecto
+     *      if_true tk goto Lcachorro
+     *      param receptor ...              caso por defecto: la version que se resolvio
+     *      call Animal_hablar              en la semantica (la del tipo declarado)
+     *      goto Lfin
+     *      Lperro:
+     *        param receptor ...
+     *        call Perro_hablar
+     *        goto Lfin
+     *      Lfin:
+     * @param generador
+     * @param receptor
+     * @param lugaresArgs
+     * @param entradas
+     * @param etiquetaPorDefecto
+     * @param resultado
+     */
+    private void emitirDispatch(GeneradorC3D generador, String receptor, List<String> lugaresArgs,
+                                List<GeneradorC3D.EntradaDispatch> entradas,
+                                String etiquetaPorDefecto, String resultado) {
+        int nArgs = argumentos.size() + 1;
+
+        String classId = generador.nuevoTemporal();
+        generador.emitirCargaCampo(receptor, GeneradorC3D.CAMPO_CLASS_ID, classId);
+
+        // Etiqueta de cada implementacion distinta a la por defecto, en orden de aparicion.
+        Map<String, String> casoPorFuncion = new LinkedHashMap<>();
+        for (GeneradorC3D.EntradaDispatch e : entradas) {
+            if (e.etiqueta().equals(etiquetaPorDefecto)) continue;
+            String caso = casoPorFuncion.computeIfAbsent(e.etiqueta(), k -> generador.nuevaEtiqueta());
+
+            String cmp = generador.nuevoTemporal();
+            generador.emitirBinaria("==", classId, String.valueOf(e.classId()), cmp);
+            generador.emitirIfTrue(cmp, caso);
+        }
+
+        String fin = generador.nuevaEtiqueta();
+
+        emitirParams(generador, receptor, lugaresArgs);
+        generador.emitirCall(etiquetaPorDefecto, nArgs, resultado);
+        generador.emitirGoto(fin);
+
+        for (Map.Entry<String, String> caso : casoPorFuncion.entrySet()) {
+            generador.emitirEtiqueta(caso.getValue());
+            emitirParams(generador, receptor, lugaresArgs);
+            generador.emitirCall(caso.getKey(), nArgs, resultado);
+            generador.emitirGoto(fin);
+        }
+
+        generador.emitirEtiqueta(fin);
     }
 
     // Nombre de la clase que declara el miembro, o "respaldo" si no se conoce.
