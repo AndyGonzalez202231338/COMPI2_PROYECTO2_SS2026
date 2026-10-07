@@ -55,6 +55,8 @@ public final class DeclaracionVariable extends NodoY implements InstruccionY {
         }
 
         if (inicializador != null) {
+            if (inicializador instanceof Leer lectura) lectura.setTipoEsperado(t);
+
             Tipo tInit = inicializador.verificar(ambito, errores);
             if (!Tipos.esAsignable(t, tInit))
                 errores.reportar(linea, columna,

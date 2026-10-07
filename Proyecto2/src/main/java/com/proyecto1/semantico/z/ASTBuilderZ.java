@@ -97,7 +97,7 @@ public class ASTBuilderZ extends GramaticaZBaseVisitor<NodoAST> {
                 : construirTipoRef((GramaticaZ.TipoDefContext) ctx.tipo());
         List<Parametro> parametros = construirParametros(ctx.formalParameters());
         Bloque cuerpo = construirBloque((GramaticaZ.BlockDefContext) ctx.block());
-        return new Metodo(ctx.ID().getText(), parametros, tipoRetorno, cuerpo, linea(ctx), columna(ctx));
+        return new Metodo(ctx.nombreMiembro().getText(), parametros, tipoRetorno, cuerpo, linea(ctx), columna(ctx));
     }
 
     /**
@@ -590,7 +590,7 @@ public class ASTBuilderZ extends GramaticaZBaseVisitor<NodoAST> {
     @Override
     public NodoAST visitPrimarioCampo(GramaticaZ.PrimarioCampoContext ctx) {
         ExpresionZ objeto = (ExpresionZ) visit(ctx.primaryExpression());
-        return new AccesoCampo(objeto, ctx.ID().getText(), linea(ctx), columna(ctx));
+        return new AccesoCampo(objeto, ctx.nombreMiembro().getText(), linea(ctx), columna(ctx));
     }
 
     @Override

@@ -132,11 +132,19 @@ inicializadorArreglo
     : LLAVEIZQ expresion (COMA expresion)* LLAVEDER                       #inicializadorArregloDef
     ;
 
+/** Nombre de miembro de un objeto importado; acepta palabras reservadas de Y. **/
+nombreMiembro
+    : ID
+    | IMPRIMIR | LEER | SINO | CONTRARIO | ELEGIR | CASO | SIEMPRE
+    | PARA | MIENTRAS | HACER | CONTINUAR | ROMPER
+    ;
+
 tipo
     : NUMERUS                                                             #tipoNumerus
     | DECIMALIS                                                           #tipoDecimalis
     | TEXTUM                                                              #tipoTextum
     | LITTERA                                                             #tipoLittera
+    | BOOL                                                                #tipoBool
     | FALSUS                                                              #tipoFalsus
     | ID                                                                  #tipoImportado
     ;
@@ -201,7 +209,7 @@ expresionPostfija
 // Recursiva a la izquierda para encadenar: obj.campo, obj[i],
 // obj.metodo(args), obj1.obj2.metodo() -- ver desviación 2.
 primaria
-    : primaria PUNTO ID                                                   #primariaCampo
+    : primaria PUNTO nombreMiembro                                        #primariaCampo
     | primaria LPAREN listaArgumentos? RPAREN                             #primariaLlamada
     | primaria CORIZQ expresion CORDER                                    #primariaIndice
     | NOVUS ID LPAREN listaArgumentos? RPAREN                             #primariaNuevoObjeto

@@ -17,7 +17,7 @@ public final class Leer extends NodoY implements ExpresionY {
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         // leer() se asigna a variables; se asume cadena por defecto.
         // Si quieres un comportamiento más fino, devuelve el tipo del contexto de asignación.
-        return TipoPrimitivo.CADENA;
+        return TipoPrimitivo.DESCONOCIDO;
     }
 
     /**
@@ -30,7 +30,21 @@ public final class Leer extends NodoY implements ExpresionY {
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         String t = generador.nuevoTemporal();
-        generador.emitirRead(t);
-        return ResultadoC3D.temporal(t, TipoPrimitivo.CADENA);
+        generador.emitirRead(t, nombreTipoEsperado());
+        Tipo devuelto = (tipoEsperado != null) ? tipoEsperado : TipoPrimitivo.CADENA;
+        return ResultadoC3D.temporal(t, devuelto);
+    }
+
+    /** Tipo que el contexto espera de esta lectura (lo fija quien la recibe). */
+    private Tipo tipoEsperado;
+
+    public void setTipoEsperado(Tipo t) { this.tipoEsperado = t; }
+
+    private String nombreTipoEsperado() {
+        if (tipoEsperado == TipoPrimitivo.ENTERO)   return "entero";
+        if (tipoEsperado == TipoPrimitivo.FLOTANTE) return "flotante";
+        if (tipoEsperado == TipoPrimitivo.CARACTER) return "caracter";
+        if (tipoEsperado == TipoPrimitivo.BOOL)     return "bool";
+        return "cadena";
     }
 }

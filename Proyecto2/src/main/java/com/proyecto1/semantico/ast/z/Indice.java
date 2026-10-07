@@ -83,10 +83,16 @@ public final class Indice extends NodoZ implements ExpresionZ {
         // 2) C3D de la base una sola vez.
         ResultadoC3D baseRes = base.generarC3D(generador);
 
-        // 3) 1D o no aplanable → ruta composicional (jagged).
+        // 3) 1D o no aplanable -> ruta composicional (jagged).
         boolean puedeAplanar = tipoArregloBase != null
                 && tipoArregloBase.esAplanable()
-                && indices.size() >= 2;
+                && indices.size() >= 2 && false;
+                // Los arreglos multidimensionales se reservan SIEMPRE jagged
+                // (arreglo de punteros, "int**"), asi que la indexacion tiene que
+                // ser encadenada: arr[i] y luego [j]. El aplanado quedaba
+                // descoordinado con la reserva y provocaba segfault.
+
+
 
         if (!puedeAplanar) {
             String lugarActual = baseRes.getLugar();

@@ -19,6 +19,7 @@ public final class NuevoArregloConTamano extends NodoZ implements ExpresionZ {
 
     private final NodoTipoRef tipoElemento;
     private final List<ExpresionZ> tamanos;
+    private Tipo tipoResultado;
 
     public NuevoArregloConTamano(NodoTipoRef tipoElemento, List<ExpresionZ> tamanos,
                                  int linea, int columna) {
@@ -54,6 +55,7 @@ public final class NuevoArregloConTamano extends NodoZ implements ExpresionZ {
             }
             base = new TipoArreglo(base, longitud);
         }
+        this.tipoResultado = base;
         return base;
     }
 
@@ -65,11 +67,11 @@ public final class NuevoArregloConTamano extends NodoZ implements ExpresionZ {
             tamRes.add(tam.generarC3D(generador));
         }
 
-        Tipo tipoResultado = verificar(null, null);
+        Tipo tipoResultado = this.tipoResultado;
         TipoArreglo tipoArr = (tipoResultado instanceof TipoArreglo ta) ? ta : null;
 
         // 2) Rama FLAT si es aplanable.
-        if (tipoArr != null && tipoArr.esAplanable()) {
+        if (tipoArr != null && tipoArr.esAplanable() && tamanos.size() == 1) {
             List<String> tamanosStr = new ArrayList<>();
             for (ResultadoC3D tam : tamRes) tamanosStr.add(tam.getLugar());
 

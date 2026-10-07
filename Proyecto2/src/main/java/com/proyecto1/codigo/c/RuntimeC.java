@@ -46,6 +46,7 @@ public final class RuntimeC implements ProveedorRuntime {
                 #include <stdio.h>
                 #include <stdlib.h>
                 #include <string.h>
+                #include <stdbool.h>
 
                 /* Lee una línea completa de stdin, sin el '\\n'. Devuelve un char* en heap. */
                 static char* rt_read_string(void) {
@@ -96,6 +97,12 @@ public final class RuntimeC implements ProveedorRuntime {
                     size_t len = strlen(buf);
                     char* r = (char*)malloc(len + 1);
                     if (r) memcpy(r, buf, len + 1);
+                    return r;
+                }
+                
+                static char* rt_char_to_string(char c) {
+                    char* r = (char*)malloc(2);
+                    if (r) { r[0] = c; r[1] = '\\0'; }
                     return r;
                 }
 

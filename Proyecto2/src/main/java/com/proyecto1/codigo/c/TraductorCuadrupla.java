@@ -101,7 +101,8 @@ public final class TraductorCuadrupla implements VisitanteCuadrupla<String> {
     public String visitar(CuadruplaPrint c) {
         String valor = c.valor();
         String tipo = tipoEfectivo(valor);
-        return "printf(\"" + formatoPrintf(tipo) + "\", " + valor + ");";
+        String fmt = formatoPrintf(tipo) + (c.nuevaLinea() ? "\\n" : "");
+        return "printf(\"" + fmt + "\", " + valor + ");";
     }
 
     @Override
@@ -136,8 +137,8 @@ public final class TraductorCuadrupla implements VisitanteCuadrupla<String> {
     public String visitar(CuadruplaNewArray c) {
         List<String> ts = c.tamanos();
         String producto = (ts.size() == 1) ? ts.get(0) : String.join(" * ", ts);
-        return c.destino() + " = (" + c.tipoElemento() + "*) malloc(("
-                + producto + ") * sizeof(" + c.tipoElemento() + "));";
+        String tipoC = TraductorTipos.nombreFuenteAC(c.tipoElemento());
+        return c.destino() + " = (" + tipoC + "*) malloc(("+ producto + ") * sizeof(" + tipoC + "));";
     }
 
     /**
@@ -146,16 +147,23 @@ public final class TraductorCuadrupla implements VisitanteCuadrupla<String> {
      * y temporales.
      */
     private String tipoEfectivo(String lugar) {
+        return tipoEfectivo(lugar, tipos);
+    }
+
+    static String tipoEfectivo(String lugar, java.util.Map<String, String> tipos) {
         if (lugar == null) return "int";
         if (lugar.length() >= 2 && lugar.startsWith("\"") && lugar.endsWith("\"")) return "char*";
         if (lugar.length() >= 2 && lugar.startsWith("'") && lugar.endsWith("'")) return "char";
         if ("true".equals(lugar) || "false".equals(lugar)) return "int";
         if ("null".equals(lugar)) return "void*";
+        if (lugar.matches("-?\\d+")) return "int";
+        if (lugar.matches("-?\\d*\\.\\d+")) return "double";
         return tipos.getOrDefault(lugar, "int");
     }
 
     private static String convertirAString(String lugar, String tipoC) {
         if ("double".equals(tipoC)) return "rt_double_to_string(" + lugar + ")";
+        if ("char".equals(tipoC))   return "rt_char_to_string(" + lugar + ")";
         return "rt_int_to_string(" + lugar + ")";
     }
 
