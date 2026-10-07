@@ -65,6 +65,14 @@ PRINTLN   : 'println';
 PRINT     : 'print';
 READLN    : 'readln';
 
+// Fase 2: encapsulamiento, herencia, polimorfismo y this.
+EXTENDS   : 'extends';
+PRIVATE   : 'private';
+PROTECTED : 'protected';
+THIS      : 'this';
+SUPER     : 'super';
+ARROBA    : '@';
+
 /** PALABRAS RESERVADAS DE PIGLATIN **/
 IMPORT       : 'import';
 ESTO         : 'esto';
