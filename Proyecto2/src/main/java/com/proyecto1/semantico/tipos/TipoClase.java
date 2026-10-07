@@ -23,6 +23,12 @@ public final class TipoClase implements Tipo {
     @Override
     public boolean esCompuesto() { return true; }
 
+    // Perro es subtipo de Animal si Perro extiende Animal (directa o indirectamente).
+    // Toda clase es subtipo de si misma.
+    public boolean esSubtipoDe(TipoClase otro) {
+        return otro != null && definicion.esSubclaseDe(otro.definicion);
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
