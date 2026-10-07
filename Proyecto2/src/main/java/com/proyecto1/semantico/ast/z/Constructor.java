@@ -1,8 +1,10 @@
 package com.proyecto1.semantico.ast.z;
 
+import com.proyecto1.semantico.tabla.ModificadorAcceso;
 import com.proyecto1.semantico.ast.GeneradorC3D;
 import com.proyecto1.semantico.ast.ResultadoC3D;
 import com.proyecto1.semantico.errores.ManejadorErrores;
+import com.proyecto1.semantico.tabla.Acceso;
 import com.proyecto1.semantico.tabla.Ambito;
 import com.proyecto1.semantico.tabla.AmbitoClase;
 import com.proyecto1.semantico.tabla.AmbitoFuncion;
@@ -45,6 +47,28 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
     // Fase 2: modificador de acceso; DEFAULT si no se escribio ninguno.
     private final ModificadorAcceso modificador;
 
+    // Fase 2: true si lo agrego Clase porque la clase no declaro ningun constructor.
+    private boolean implicito = false;
+
+    /**
+     * Fase 2: llamada al constructor del padre, resuelta por verificar().
+     *  superExplicito -> "super(args);" escrito como primera sentencia del cuerpo
+     *  superImplicito -> constructor sin parametros del padre, cuando no se escribio super(...)
+     * A lo sumo uno de los dos es distinto de null, y ambos son null si la clase no hereda.
+     */
+    private Llamada superExplicito;
+    private Simbolo superImplicito;
+
+    // Constructor por defecto que se agrega a una clase sin constructores: public, sin parametros y con cuerpo vacio.
+    public static Constructor implicito(String nombreClase, int linea, int columna) {
+        Constructor c = new Constructor(ModificadorAcceso.PUBLIC, nombreClase, new ArrayList<>(),
+                new Bloque(new ArrayList<>(), linea, columna), linea, columna);
+        c.implicito = true;
+        return c;
+    }
+
+    public boolean esImplicito() { return implicito; }
+
     // Constructor de la Fase 1: constructor public.
     public Constructor(String nombre, List<Parametro> parametros, Bloque cuerpo,
                        int linea, int columna) {
@@ -74,8 +98,8 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
     public Tipo verificar(AmbitoClase ambClase, ManejadorErrores errores) {
         /**
          * (1) Guardar el nombre REAL de la clase para usarlo al generar la etiqueta C3D.
-         * El error por nombre incorrecto YA se reportó en AnalizadorSemanticoZ;
-         * aquí no se vuelve a chequear (evita el mensaje duplicado).
+         *     El error por nombre incorrecto YA se reportó en AnalizadorSemanticoZ;
+         *     aquí no se vuelve a chequear (evita el mensaje duplicado).
          */
         this.nombreClaseReal = ambClase.getSimboloContenedor().getNombre();
 
@@ -101,8 +125,45 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
             }
         }
 
+        /**
+         * (3) Herencia: llamada al constructor del padre.
+         * Si la primera sentencia es super(...), esa Llamada queda autorizada (en cualquier
+         * otro lugar super(...) es error). La resuelve la propia Llamada al verificar el cuerpo.
+         */
+        this.superExplicito = primeraSentenciaSuper();
+        if (superExplicito != null) superExplicito.autorizarSuperConstructor();
+
         cuerpo.verificar(amb, errores);
+
+        // Sin super(...) explicito se llama al constructor sin parametros del padre,
+        // igual que Java. Si el padre no tiene uno, hay que escribir super(...).
+        Simbolo padre = ambClase.getClasePadre();
+        if (padre != null && superExplicito == null) {
+            Simbolo ctorPadre = padre.buscarMiembroLocal(padre.getNombre() + "#0");
+            if (ctorPadre == null || ctorPadre.getCategoria() != CategoriaSimbolo.CONSTRUCTOR) {
+                String donde = implicito
+                        ? "declare un constructor en '" + nombreClaseReal + "' que llame a super(...)"
+                        : "llame a super(...) como primera sentencia del constructor";
+                errores.reportar(linea, columna,
+                        "La clase padre '" + padre.getNombre()
+                                + "' no tiene un constructor sin parametros; " + donde);
+            } else if (Acceso.verificar(ctorPadre, amb, errores, linea, columna)) {
+                this.superImplicito = ctorPadre;
+            }
+        }
         return TipoPrimitivo.VOID;
+    }
+
+    // La Llamada "super(args)" si es la primera sentencia del cuerpo, si no null.
+    private Llamada primeraSentenciaSuper() {
+        List<InstruccionZ> instrucciones = cuerpo.getInstrucciones();
+        if (instrucciones.isEmpty()) return null;
+        if (instrucciones.get(0) instanceof ExpresionStmt es
+                && es.getExpresion() instanceof Llamada ll
+                && ll.esSuperConstructor()) {
+            return ll;
+        }
+        return null;
     }
 
 
@@ -164,6 +225,23 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
 
         Ambito anterior = generador.entrarAmbito(ambitoPropio);
 
+        /**
+         * Orden de Java: primero el constructor del padre, despues los inicializadores
+         * de los atributos propios y al final el resto del cuerpo. Por eso, si la primera
+         * sentencia es super(...), se genera antes que los inicializadores.
+         */
+        List<InstruccionZ> instrucciones = cuerpo.getInstrucciones();
+        int desde = 0;
+        if (superExplicito != null) {
+            instrucciones.get(0).generarC3D(generador);
+            desde = 1;
+        } else if (superImplicito != null) {
+            String etiquetaPadre = GeneradorC3D.etiquetaConstructor(
+                    superImplicito.getClaseDuena().getNombre(), new ArrayList<>());
+            generador.emitirParam("this");
+            generador.emitirCall(etiquetaPadre, 1, null);
+        }
+
         for (Atributo a : atributosClase) {
             if (a.getInicializador() != null) {
                 ResultadoC3D v = a.getInicializador().generarC3D(generador);
@@ -171,7 +249,9 @@ public final class Constructor extends NodoZ /* o la base que ya uses */ {
             }
         }
 
-        cuerpo.generarC3D(generador);
+        for (int i = desde; i < instrucciones.size(); i++) {
+            instrucciones.get(i).generarC3D(generador);
+        }
 
         generador.salirAmbito(anterior);
         generador.emitirEndFunc();

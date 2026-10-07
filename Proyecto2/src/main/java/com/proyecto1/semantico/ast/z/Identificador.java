@@ -3,6 +3,7 @@ package com.proyecto1.semantico.ast.z;
 import com.proyecto1.semantico.ast.GeneradorC3D;
 import com.proyecto1.semantico.ast.ResultadoC3D;
 import com.proyecto1.semantico.errores.ManejadorErrores;
+import com.proyecto1.semantico.tabla.Acceso;
 import com.proyecto1.semantico.tabla.Ambito;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
 import com.proyecto1.semantico.tabla.Simbolo;
@@ -42,6 +43,11 @@ public final class Identificador extends NodoZ implements ExpresionZ {
         // el constructor).
         if (!s.isInicializado() && s.getCategoria() == CategoriaSimbolo.VARIABLE) {
             errores.reportar(linea, columna, "Variable '" + nombre + "' usada sin inicializar");
+        }
+        // Un atributo heredado se resuelve por nombre simple (ver AmbitoClase.resolver);
+        // si es private del padre no se puede usar desde la hija.
+        if (s.getCategoria() == CategoriaSimbolo.ATRIBUTO) {
+            Acceso.verificar(s, ambito, errores, linea, columna);
         }
         return s.getTipo();
     }

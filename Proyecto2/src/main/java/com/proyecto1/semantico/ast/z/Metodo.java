@@ -1,5 +1,6 @@
 package com.proyecto1.semantico.ast.z;
 
+import com.proyecto1.semantico.tabla.ModificadorAcceso;
 import com.proyecto1.semantico.ast.GeneradorC3D;
 import com.proyecto1.semantico.ast.ResultadoC3D;
 import com.proyecto1.semantico.errores.ManejadorErrores;
@@ -45,13 +46,17 @@ public final class Metodo extends NodoZ {
      *   null       -> no habia anotacion
      *   "Override" -> metodo marcado como sobrescritura (polimorfismo)
      *   otro texto -> anotacion invalida; se reporta en verificar()
-     *   Se guarda el texto y no solo un boolean para poder dar un mensaje claro.
+     * Se guarda el texto y no solo un boolean para poder dar un mensaje claro.
      */
     private final String anotacion;
     private final int lineaAnotacion;
     private final int columnaAnotacion;
 
     public static final String ANOTACION_OVERRIDE = "Override";
+
+    // Simbolo registrado para este metodo en la tabla de la clase. Lo fija
+    // AnalizadorSemanticoZ.registrarMiembros y se usa para validar @Override.
+    private Simbolo simbolo;
 
     // Constructor de la Fase 1: metodo public sin anotacion.
     public Metodo(String nombre, List<Parametro> parametros, NodoTipoRef tipoRetorno,
@@ -85,6 +90,14 @@ public final class Metodo extends NodoZ {
 
     public String getAnotacion() {
         return anotacion;
+    }
+
+    public Simbolo getSimbolo() {
+        return simbolo;
+    }
+
+    public void setSimbolo(Simbolo simbolo) {
+        this.simbolo = simbolo;
     }
 
     // true solo si la anotacion es exactamente @Override.

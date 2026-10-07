@@ -3,6 +3,7 @@ package com.proyecto1.semantico.ast.z;
 import com.proyecto1.semantico.ast.GeneradorC3D;
 import com.proyecto1.semantico.ast.ResultadoC3D;
 import com.proyecto1.semantico.errores.ManejadorErrores;
+import com.proyecto1.semantico.tabla.Acceso;
 import com.proyecto1.semantico.tabla.Ambito;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
 import com.proyecto1.semantico.tabla.Simbolo;
@@ -48,6 +49,9 @@ public final class AccesoCampo extends NodoZ implements ExpresionZ {
             errores.reportar(linea, columna, "'" + campo + "' no es un atributo accesible");
             return TipoPrimitivo.DESCONOCIDO;
         }
+        // Encapsulamiento: private/protected segun la clase desde la que se accede.
+        // Si falla se sigue con el tipo real del campo para no generar errores en cascada.
+        Acceso.verificar(miembro, ambito, errores, linea, columna);
         tipoCampo = miembro.getTipo();
         return tipoCampo;
     }
