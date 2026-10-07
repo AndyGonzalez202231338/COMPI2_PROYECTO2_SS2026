@@ -3,7 +3,9 @@ package com.proyecto1.semantico.ast.piglatin;
 import com.proyecto1.semantico.ast.GeneradorC3D;
 import com.proyecto1.semantico.ast.ResultadoC3D;
 import com.proyecto1.semantico.errores.ManejadorErrores;
+import com.proyecto1.semantico.tabla.Acceso;
 import com.proyecto1.semantico.tabla.Ambito;
+import com.proyecto1.semantico.tabla.ResolucionMiembros;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
@@ -51,19 +53,23 @@ public final class NuevoObjeto extends NodoPigLatin implements ExpresionPigLatin
         }
 
         if (s.getCategoria() == CategoriaSimbolo.CLASE) {
-            // Verificación de aridad contra el constructor (mismo patrón que Z).
-            // Se cachea el símbolo del constructor para usar sus tipos formales en generarC3D.
-            Simbolo ctor = s.getMiembros().valores().stream()
-                    .filter(m -> m.getCategoria() == CategoriaSimbolo.CONSTRUCTOR
-                            && m.getParametros().size() == argumentos.size())
-                    .findFirst().orElse(null);
-            if (ctor == null)
+            /**
+             * Verificación de aridad contra el constructor (mismo patrón que Z).
+             * Se cachea el símbolo del constructor para usar sus tipos formales en generarC3D.
+             * Fase 2: se eligen por tipos de argumento (con subtipos), igual que en Z.
+             */
+            List<Tipo> tiposArgs = new ArrayList<>();
+            for (ExpresionPigLatin a : argumentos) tiposArgs.add(a.verificar(ambito, errores));
+            Simbolo ctor = ResolucionMiembros.resolverConstructor(s, tiposArgs);
+            if (ctor == null) {
                 errores.reportar(linea, columna,
                         "No existe constructor de '" + nombreTipo + "' con " +
                                 argumentos.size() + " argumentos");
-            else
+            } else {
                 this.constructorResuelto = ctor;
-            for (ExpresionPigLatin a : argumentos) a.verificar(ambito, errores);
+                // Desde PigLatin solo se pueden usar constructores public o default.
+                Acceso.verificar(ctor, ambito, errores, linea, columna);
+            }
             return new TipoClase(s);
         }
 

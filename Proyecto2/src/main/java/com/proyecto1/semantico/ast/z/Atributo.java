@@ -1,5 +1,6 @@
 package com.proyecto1.semantico.ast.z;
 
+import com.proyecto1.semantico.tabla.ModificadorAcceso;
 import com.proyecto1.semantico.errores.ManejadorErrores;
 import com.proyecto1.semantico.tabla.AmbitoClase;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
@@ -53,10 +54,13 @@ public final class Atributo extends NodoZ {
 
     public void verificar(AmbitoClase amb, ManejadorErrores errores) {
         Tipo t = tipo.resolver(amb, errores);
-        // AnalizadorSemanticoZ ya registró este atributo en su primera pasada. Si el símbolo que
-        // hay en el ámbito es ESTE mismo (misma posición), no hay nada que declarar: intentarlo de
-        // nuevo lo marcaba como "duplicado" de sí mismo en TODA clase con atributos. Un duplicado
-        // real (otro atributo con el mismo nombre, en otra posición) sí se sigue reportando.
+
+        /**
+         * AnalizadorSemanticoZ ya registró este atributo en su primera pasada. Si el símbolo que
+         * hay en el ámbito es ESTE mismo (misma posición), no hay nada que declarar: intentarlo de
+         * nuevo lo marcaba como "duplicado" de sí mismo en TODA clase con atributos. Un duplicado
+         * real (otro atributo con el mismo nombre, en otra posición) sí se sigue reportando.
+         */
         Simbolo existente = amb.resolverLocal(nombre);
         boolean yaRegistradoEnPrimeraPasada = existente != null
                 && existente.getCategoria() == CategoriaSimbolo.ATRIBUTO

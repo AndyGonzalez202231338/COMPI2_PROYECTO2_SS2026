@@ -3,9 +3,7 @@ package com.proyecto1.semantico.ast.piglatin;
 import com.proyecto1.semantico.ast.GeneradorC3D;
 import com.proyecto1.semantico.ast.ResultadoC3D;
 import com.proyecto1.semantico.errores.ManejadorErrores;
-import com.proyecto1.semantico.tabla.Ambito;
-import com.proyecto1.semantico.tabla.CategoriaSimbolo;
-import com.proyecto1.semantico.tabla.Simbolo;
+import com.proyecto1.semantico.tabla.*;
 import com.proyecto1.semantico.tipos.Tipo;
 import com.proyecto1.semantico.tipos.TipoClase;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
@@ -79,13 +77,8 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
             List<Tipo> tiposArgs = new ArrayList<>();
             for (ExpresionPigLatin a : argumentos) tiposArgs.add(a.verificar(ambito, errores));
 
-            StringBuilder claveEspecifica = new StringBuilder(ac.getCampo()).append("#").append(argumentos.size());
-            for (Tipo t : tiposArgs) claveEspecifica.append("#").append(t.nombre());
-            Simbolo m = tc.getDefinicion().buscarMiembro(claveEspecifica.toString());
-
-            if (m == null) {
-                m = tc.getDefinicion().buscarMiembro(ac.getCampo() + "#" + argumentos.size());
-            }
+            // Fase 2: misma resolucion que Llamada(Z), con herencia y subtipos.
+            Simbolo m = ResolucionMiembros.resolverMetodo(tc.getDefinicion(), ac.getCampo(), tiposArgs);
 
             if (m == null || m.getCategoria() != CategoriaSimbolo.METODO) {
                 errores.reportar(linea, columna,
@@ -93,7 +86,13 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
                 return TipoPrimitivo.DESCONOCIDO;
             }
             this.simboloResuelto = m;
-            this.nombreClaseObjetivo = tc.getDefinicion().getNombre();
+            // La etiqueta C3D es la de la clase que declara el metodo: un metodo heredado
+            // vive en la clase padre (Persona_saludar aunque el objeto sea un Profesor).
+            this.nombreClaseObjetivo = (m.getClaseDuena() != null)
+                    ? m.getClaseDuena().getNombre()
+                    : tc.getDefinicion().getNombre();
+            // Desde PigLatin no hay clase actual: solo se pueden llamar metodos public o default.
+            Acceso.verificar(m, ambito, errores, linea, columna);
             // Los argumentos YA se verificaron arriba (se necesitaban sus tipos para la clave);
             // no repetirlos -- misma razón por la que Llamada(Z) tiene su propio
             // verificarArgumentosYRetorno(Simbolo, List<Tipo>, ManejadorErrores) en vez de
@@ -148,8 +147,7 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
             ResultadoC3D r = ac.getObjeto().generarC3D(generador);
             receptor = r.getLugar();
         }
-        // Caso Identificador: sin receptor, nada que evaluar.
-        // Evaluar todos los argumentos, guardando sus lugares.
+        // Caso Identificador: sin receptor, nada que evaluar. Evaluar todos los argumentos, guardando sus lugares.
         List<String> lugaresArgs = new ArrayList<>();
         for (ExpresionPigLatin a : argumentos) {
             ResultadoC3D v = a.generarC3D(generador);
@@ -183,7 +181,6 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
             return ResultadoC3D.temporal(t, tipoRetorno);
         }
 
-        // Caso "obj.m(args)": receptor ya evaluado, +1 al número de argumentos.
         // Caso "obj.m(args)": receptor ya evaluado, +1 al número de argumentos.
         if (objetivo instanceof AccesoCampo ac) {
             String clase = (nombreClaseObjetivo != null) ? nombreClaseObjetivo : "?";

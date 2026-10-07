@@ -1,8 +1,7 @@
-package com.proyecto1.semantico.ast.z;
+package com.proyecto1.semantico.tabla;
 
 /**
  * Modificador de acceso de una clase o de un miembro (atributo, constructor, metodo).
- *
  * DEFAULT representa la ausencia de modificador (package-private). No existe en la
  * gramatica como palabra: el ASTBuilderZ lo asigna cuando no viene public/private/protected.
  *

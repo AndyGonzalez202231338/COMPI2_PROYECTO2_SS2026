@@ -1,6 +1,5 @@
 package com.proyecto1.semantico.tabla;
 
-import com.proyecto1.semantico.ast.z.ModificadorAcceso;
 import com.proyecto1.semantico.tipos.Tipo;
 
 import java.util.ArrayList;
@@ -32,13 +31,17 @@ public class Simbolo {
 
     /**
      * Cuántos elementos tiene cada dimensión, si el símbolo es un arreglo declarado con
-     * tamaño fijo (Y: "entero notas[5]"; Z: se calcula en tiempo de ejecución con "new").
+     * tamaño fijo (Y?: "entero notas[5]"; Z: se calcula en tiempo de ejecución con "new").
      */
     private final List<Integer> tamanosArreglo = new ArrayList<>();
 
     private boolean inicializado = false; // ¿ya se le asignó un valor al menos una vez?
 
-    // Fase 2: herencia, encapsulamiento y polimorfismo (solo clases de Zetariano).
+    /**
+     * Fase 2: herencia, encapsulamiento y polimorfismo (solo clases de Zetariano).
+     * Para cualquier otro simbolo estos campos quedan en su valor por defecto y no
+     * ambian el comportamiento de la Fase 1.
+     */
 
     // Modificador de acceso del miembro o de la clase. PUBLIC por defecto para que
     // los simbolos de Y? y PigLatin (que no tienen modificadores) sigan siendo visibles.
@@ -77,6 +80,13 @@ public class Simbolo {
     // Solo para METODO: indice dentro de la tabla virtual de su clase (-1 si no es
     // virtual: metodos private, que no se pueden sobrescribir).
     private int indiceVirtual = -1;
+
+    /**
+     * Solo para CLASE: identificador de la clase en tiempo de ejecucion. Cada objeto lo
+     * guarda en su campo oculto _class_id (posicion 0) y el dispatch dinamico lo compara
+     * para elegir el metodo. -1 = no asignado (no es una clase).
+     */
+    private int classId = -1;
 
     public Simbolo(String nombre, CategoriaSimbolo categoria, Tipo tipo, int linea, int columna) {
         this.nombre = nombre;
@@ -142,6 +152,16 @@ public class Simbolo {
         return miembrosEnOrden;
     }
 
+    /**
+     * Busca el miembro en esta clase y, si no esta, sube por la cadena de herencia.
+     * si todo el codigo que ya usaba buscarMiembro (AccesoCampo, Llamada, PigLatin)
+     * ve los miembros heredados sin cambios, y un metodo sobrescrito gana sobre el del
+     * padre porque se encuentra primero. Los constructores no se heredan por como se
+     * guardan: su clave empieza con el nombre de SU clase ("Animal#1#..."), y desde la
+     * hija se buscan con el nombre de la hija.
+     * @param nombre
+     * @return
+     */
     public Simbolo buscarMiembro(String nombre) {
         Simbolo actual = this;
         while (actual != null) {
@@ -158,6 +178,7 @@ public class Simbolo {
     }
 
     // --- Encapsulamiento ---
+
     public ModificadorAcceso getModificador() {
         return modificador;
     }
@@ -175,6 +196,7 @@ public class Simbolo {
     }
 
     // --- Herencia ---
+
     public String getNombreClasePadre() {
         return nombreClasePadre;
     }
@@ -201,8 +223,7 @@ public class Simbolo {
     /**
      * true si esta clase es "otra" o hereda de ella (directa o indirectamente).
      * Se compara por nombre y no por referencia: un mismo nombre de clase puede llegar
-     * como simbolos distintos (por ejemplo, dos imports de PigLatin que analizan la
-     * misma clase en ambitos separados).
+     * como simbolos distintos (por ejemplo, dos imports de PigLatin que analizan la misma clase en ambitos separados).
      * @param otra
      * @return
      */
@@ -220,8 +241,7 @@ public class Simbolo {
      * Atributos para el layout del objeto: primero los del padre (recursivo) y despues
      * los propios. Con este orden un Perro empieza con exactamente los mismos campos y
      * en las mismas posiciones que un Animal, que es lo que permite tratarlo como Animal.
-     * Incluye los private del padre: no son accesibles desde la hija pero si ocupan
-     * espacio dentro del objeto.
+     * Incluye los private del padre: no son accesibles desde la hija pero si ocupan espacio dentro del objeto.
      * @return
      */
     public List<Simbolo> getAtributosConHerencia() {
@@ -248,7 +268,6 @@ public class Simbolo {
      *  1) se copia la del padre (mismos indices)
      *  2) cada metodo propio no private que tenga la misma firma que uno heredado reemplaza ese indice (sobrescritura)
      *  3) los metodos nuevos se agregan al final
-     *  El indice de cada metodo queda guardado en el propio simbolo (indiceVirtual).
      * @return
      */
     public List<Simbolo> getTablaVirtual() {
@@ -284,6 +303,14 @@ public class Simbolo {
 
     public int getIndiceVirtual() {
         return indiceVirtual;
+    }
+
+    public int getClassId() {
+        return classId;
+    }
+
+    public void setClassId(int classId) {
+        this.classId = classId;
     }
 
     // Firma de un metodo/constructor: nombre#aridad#Tipo1#Tipo2...

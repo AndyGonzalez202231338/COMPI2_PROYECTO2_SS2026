@@ -1,8 +1,10 @@
 package com.proyecto1.semantico.ast.z;
 
+import com.proyecto1.semantico.tabla.ModificadorAcceso;
 import com.proyecto1.semantico.ast.GeneradorC3D;
 import com.proyecto1.semantico.ast.ResultadoC3D;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -20,11 +22,9 @@ public final class Clase extends NodoZ /* o la base que ya uses */ {
     private final List<Constructor> constructores;
     private final List<Metodo> metodos;
 
-    /**
-     * Fase 2: herencia y encapsulamiento.
-     * clasePadre es el ID que sigue a "extends"; null si la clase no hereda.
-     * modificador es el de la propia clase (public class / class -> DEFAULT).
-     */
+    // Fase 2: herencia y encapsulamiento.
+    // clasePadre es el ID que sigue a "extends"; null si la clase no hereda.
+    // modificador es el de la propia clase (public class / class -> DEFAULT).
     private final String clasePadre;
     private final ModificadorAcceso modificador;
 
@@ -44,8 +44,18 @@ public final class Clase extends NodoZ /* o la base que ya uses */ {
         this.modificador = (modificador != null) ? modificador : ModificadorAcceso.DEFAULT;
         this.clasePadre = clasePadre;
         this.atributos = atributos;
-        this.constructores = constructores;
         this.metodos = metodos;
+
+        // Constructor por defecto implicito (como en Java): si la clase no declara
+        // ninguno se agrega uno public sin parametros y con cuerpo vacio. Hace falta
+        // por la herencia: toda clase hija llama al constructor de su padre (explicito
+        // con super(...) o implicito sin argumentos), y ese constructor es el que
+        // ejecuta los inicializadores de los atributos del padre.
+        List<Constructor> lista = new ArrayList<>(constructores);
+        if (lista.isEmpty()) {
+            lista.add(Constructor.implicito(nombre, linea, columna));
+        }
+        this.constructores = lista;
     }
 
     public String getNombre() { return nombre; }

@@ -3,7 +3,9 @@ package com.proyecto1.semantico.ast.z;
 import com.proyecto1.semantico.ast.GeneradorC3D;
 import com.proyecto1.semantico.ast.ResultadoC3D;
 import com.proyecto1.semantico.errores.ManejadorErrores;
+import com.proyecto1.semantico.tabla.Acceso;
 import com.proyecto1.semantico.tabla.Ambito;
+import com.proyecto1.semantico.tabla.ResolucionMiembros;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
@@ -49,15 +51,12 @@ public final class NuevoObjeto extends NodoZ implements ExpresionZ {
         List<Tipo> tiposArgs = new ArrayList<>();
         for (ExpresionZ a : argumentos) tiposArgs.add(a.verificar(ambito, errores));
 
-        // (2) Clave específica con tipos.
-        StringBuilder sb = new StringBuilder(nombreClase).append("#").append(argumentos.size());
-        for (Tipo t : tiposArgs) sb.append("#").append(t.nombre());
-        Simbolo ctor = c.buscarMiembro(sb.toString());
-
-        // (3) Fallback a la clave genérica para poder reportar "argumento incompatible".
-        if (ctor == null) {
-            ctor = c.buscarMiembro(nombreClase + "#" + argumentos.size());
-        }
+        /**
+         * (2) Constructor de la clase: clave exacta, despues el mas especifico que acepte
+         * los argumentos (por subtipos) y por ultimo la clave generica nombre#aridad para
+         * poder reportar "argumento incompatible".
+         */
+        Simbolo ctor = ResolucionMiembros.resolverConstructor(c, tiposArgs);
 
         if (ctor == null) {
             errores.reportar(linea, columna,
@@ -65,6 +64,8 @@ public final class NuevoObjeto extends NodoZ implements ExpresionZ {
                             + argumentos.size() + " argumentos");
         } else {
             this.constructorResuelto = ctor;   // cachear para generarC3D
+            // Un constructor private solo se puede usar dentro de su propia clase.
+            Acceso.verificar(ctor, ambito, errores, linea, columna);
             List<Simbolo> params = ctor.getParametros();
             for (int i = 0; i < tiposArgs.size(); i++) {
                 if (!Tipos.esAsignable(params.get(i).getTipo(), tiposArgs.get(i))) {
@@ -116,9 +117,11 @@ public final class NuevoObjeto extends NodoZ implements ExpresionZ {
             generador.emitirParam(lugar);
         }
 
-        // 4) Llamar al constructor. Sin resultado: la referencia ya está en t.
-        // Se usan los tipos FORMALES del símbolo resuelto (no los del argumento real)
-        // para reproducir exactamente la etiqueta que generó Constructor.generarC3D.
+        /**
+         * 4) Llamar al constructor. Sin resultado: la referencia ya está en t.
+         * Se usan los tipos FORMALES del símbolo resuelto (no los del argumento real)
+         * para reproducir exactamente la etiqueta que generó Constructor.generarC3D.
+         */
         List<Tipo> tiposFormales = new java.util.ArrayList<>();
         if (constructorResuelto != null) {
             for (com.proyecto1.semantico.tabla.Simbolo p : constructorResuelto.getParametros()) {

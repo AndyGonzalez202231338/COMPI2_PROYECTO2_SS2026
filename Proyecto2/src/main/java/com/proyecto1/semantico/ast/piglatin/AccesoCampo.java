@@ -3,6 +3,7 @@ package com.proyecto1.semantico.ast.piglatin;
 import com.proyecto1.semantico.ast.GeneradorC3D;
 import com.proyecto1.semantico.ast.ResultadoC3D;
 import com.proyecto1.semantico.errores.ManejadorErrores;
+import com.proyecto1.semantico.tabla.Acceso;
 import com.proyecto1.semantico.tabla.Ambito;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
@@ -46,6 +47,8 @@ public final class AccesoCampo extends NodoPigLatin implements ExpresionPigLatin
                     "'" + def.getNombre() + "' no tiene miembro '" + campo + "'");
             return TipoPrimitivo.DESCONOCIDO;
         }
+        // Encapsulamiento (solo afecta a clases de Z; los campos de estructuras de Y no tienen clase duena y siempre pasan).
+        Acceso.verificar(m, ambito, errores, linea, columna);
         tipoCampo = m.getTipo();
         return tipoCampo;
     }
