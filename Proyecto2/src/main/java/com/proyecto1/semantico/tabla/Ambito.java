@@ -38,7 +38,7 @@ public abstract class Ambito {
     public boolean declarar(Simbolo simbolo) {
         if (simbolos.contiene(simbolo.getNombre())) return false;
         simbolos.insertar(simbolo.getNombre(), simbolo);
-        simbolosEnOrden.add(simbolo);          // <-- línea nueva: mantener el orden
+        simbolosEnOrden.add(simbolo);
         return true;
     }
 
@@ -68,6 +68,23 @@ public abstract class Ambito {
             actual = actual.padre;
         }
         return null;
+    }
+
+    // Sube hasta el AmbitoClase mas cercano (null si este ambito no esta dentro de una
+    // clase, por ejemplo el codigo de PigLatin o de Y).
+    public AmbitoClase ambitoClaseMasCercano() {
+        Ambito actual = this;
+        while (actual != null) {
+            if (actual instanceof AmbitoClase ac) return ac;
+            actual = actual.padre;
+        }
+        return null;
+    }
+
+    // Simbolo de la clase desde la que se esta ejecutando este codigo (null fuera de clases).
+    public Simbolo claseActual() {
+        AmbitoClase ac = ambitoClaseMasCercano();
+        return (ac == null) ? null : ac.getSimboloContenedor();
     }
 
     /** Sube en la cadena hasta el AmbitoGlobal (siempre existe, es la raíz). */
