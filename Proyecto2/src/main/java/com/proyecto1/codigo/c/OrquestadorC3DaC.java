@@ -134,7 +134,9 @@ public final class OrquestadorC3DaC {
                 firmasExternas, ambitoGlobalDeMain, runtime);
     }
 
-    /** Genera el archivo C completo: runtime + structs + prototipos + funciones + main. */
+    /**
+     * Genera el archivo C completo: runtime + structs + prototipos + funciones + main.
+     */
     public String generarArchivoCompleto() {
         List<FuncionCompilada> funciones = dividirPorFuncion();
 
@@ -172,7 +174,8 @@ public final class OrquestadorC3DaC {
         return sb.toString();
     }
 
-    private record FuncionCompilada(CuadruplaBeginFunc begin, List<Cuadrupla> cuerpo) {}
+    private record FuncionCompilada(CuadruplaBeginFunc begin, List<Cuadrupla> cuerpo) {
+    }
 
     private List<FuncionCompilada> dividirPorFuncion() {
         List<FuncionCompilada> resultado = new ArrayList<>();
@@ -327,7 +330,7 @@ public final class OrquestadorC3DaC {
 
         if ("rt_print".equals(fname) || "rt_println".equals(fname)) {
             String arg = params.isEmpty() ? "" : params.get(0);
-            String tipo = tipos.getOrDefault(arg, "int");
+            String tipo = TraductorCuadrupla.tipoEfectivo(arg, tipos);
             String sufijo = sufijoTipo(tipo);
             String fn = "rt_print".equals(fname) ? "rt_print_" + sufijo : "rt_println_" + sufijo;
             return fn + "(" + arg + ");";
@@ -348,8 +351,8 @@ public final class OrquestadorC3DaC {
     private static String sufijoTipo(String tipoC) {
         if (tipoC == null) return "int";
         if (tipoC.equals("double")) return "double";
-        if (tipoC.equals("char"))   return "char";
-        if (tipoC.equals("char*"))  return "string";
+        if (tipoC.equals("char")) return "char";
+        if (tipoC.equals("char*")) return "string";
         return "int";
     }
 
@@ -424,16 +427,16 @@ public final class OrquestadorC3DaC {
         sb.append("}\n");
         return sb.toString();
     }
-    
+
     private static String tipoAC(Tipo t) {
         if (t == null) return "void";
-        if (t == TipoPrimitivo.ENTERO)      return "int";
-        if (t == TipoPrimitivo.FLOTANTE)    return "double";
-        if (t == TipoPrimitivo.CARACTER)    return "char";
-        if (t == TipoPrimitivo.CADENA)      return "char*";
-        if (t == TipoPrimitivo.BOOL)        return "int";
-        if (t == TipoPrimitivo.VOID)        return "void";
-        if (t == TipoPrimitivo.NULO)        return "void*";
+        if (t == TipoPrimitivo.ENTERO) return "int";
+        if (t == TipoPrimitivo.FLOTANTE) return "double";
+        if (t == TipoPrimitivo.CARACTER) return "char";
+        if (t == TipoPrimitivo.CADENA) return "char*";
+        if (t == TipoPrimitivo.BOOL) return "int";
+        if (t == TipoPrimitivo.VOID) return "void";
+        if (t == TipoPrimitivo.NULO) return "void*";
         if (t == TipoPrimitivo.DESCONOCIDO) return "int";
         if (t instanceof com.proyecto1.semantico.tipos.TipoClase tc)
             return tc.getDefinicion().getNombre() + "*";
@@ -442,5 +445,37 @@ public final class OrquestadorC3DaC {
         if (t instanceof com.proyecto1.semantico.tipos.TipoArreglo ta)
             return tipoAC(ta.getBase()) + "*";
         return "int";
+    }
+
+    public static String nombreFuenteAC(String nombre) {
+        if (nombre == null) return "int";
+        int estrellas = 0;
+        while (nombre.endsWith("*")) {
+            nombre = nombre.substring(0, nombre.length() - 1);
+            estrellas++;
+        }
+
+        nombre = nombre.replace("[]", "").trim();
+        String base = baseFuenteAC(nombre);
+        return estrellas == 0 ? base : base + "*".repeat(estrellas);
+    }
+
+    private static String baseFuenteAC(String nombre) {
+        switch (nombre) {
+            case "entero": case "int": case "numerus":
+                return "int";
+            case "flotante": case "double": case "float": case "decimalis":
+                return "double";
+            case "caracter": case "char": case "littera":
+                return "char";
+            case "cadena": case "String": case "string": case "textum":
+                return "char*";
+            case "bool": case "boolean": case "falsus": case "verum":
+                return "int";
+            case "void":
+                return "void";
+            default:
+                return nombre;
+        }
     }
 }

@@ -34,10 +34,10 @@ public final class Imprimir extends NodoY implements InstruccionY {
      */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
-        for (ExpresionY a : argumentos) {
-            ResultadoC3D v = a.generarC3D(generador);
-            generador.emitirPrint(v.getLugar());
+        for (int i = 0; i < argumentos.size(); i++) {
+            ResultadoC3D v = argumentos.get(i).generarC3D(generador);
+            generador.emitirPrint(v.getLugar(), i == argumentos.size() - 1);
         }
-        return ResultadoC3D.vacio();
+            return ResultadoC3D.vacio();
     }
 }

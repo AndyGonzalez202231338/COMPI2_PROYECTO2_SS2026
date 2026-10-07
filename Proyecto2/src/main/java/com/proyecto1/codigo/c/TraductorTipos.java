@@ -59,4 +59,45 @@ public final class TraductorTipos {
 
         return "int";  // DESCONOCIDO, NULO, o cualquier tipo futuro sin mapeo
     }
+
+    /**
+     * Traduce el NOMBRE de un tipo tal como se escribe en el codigo fuente
+     * ("entero", "int", "boolean", "cadena", "String", ...) al tipo C.
+     * Lo usan las cuadruplas que guardan el tipo como texto (new, newarray):
+     * sin esto, "new boolean[n]" emitia "boolean*" en C, que no existe.
+     * Un nombre desconocido se asume clase/estructura del usuario.
+     */
+    public static String nombreFuenteAC(String nombre) {
+        if (nombre == null) return "int";
+        // El descriptor de un arreglo multidimensional viene con estrellas
+        // ("boolean*" para la dimension externa de boolean[a][b]). Se separan,
+        // se traduce la base y se vuelven a pegar.
+        int estrellas = 0;
+        while (nombre.endsWith("*")) {
+            nombre = nombre.substring(0, nombre.length() - 1);
+            estrellas++;
+        }
+        nombre = nombre.replace("[]", "").trim();
+        String base = baseFuenteAC(nombre);
+        return estrellas == 0 ? base : base + "*".repeat(estrellas);
+    }
+
+    private static String baseFuenteAC(String nombre) {
+        switch (nombre) {
+            case "entero": case "int": case "numerus":
+                return "int";
+            case "flotante": case "double": case "float": case "decimalis":
+                return "double";
+            case "caracter": case "char": case "littera":
+                return "char";
+            case "cadena": case "String": case "string": case "textum":
+                return "char*";
+            case "bool": case "boolean": case "falsus": case "verum":
+                return "int";
+            case "void":
+                return "void";
+            default:
+                return nombre;   // clase o estructura del usuario
+        }
+    }
 }

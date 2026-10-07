@@ -153,7 +153,7 @@ public final class InferenciaTiposC implements VisitanteCuadrupla<Void> {
 
     @Override
     public Void visitar(CuadruplaRead c) {
-        declararSiNuevo(c.destino(), "char*");
+        declararSiNuevo(c.destino(), TraductorTipos.nombreFuenteAC(c.tipo()));
         return null;
     }
 
@@ -165,7 +165,7 @@ public final class InferenciaTiposC implements VisitanteCuadrupla<Void> {
 
     @Override
     public Void visitar(CuadruplaNewArray c) {
-        String tipoC = c.tipoElemento().replace("[]", "*") + "*";
+        String tipoC = TraductorTipos.nombreFuenteAC(c.tipoElemento().replace("[]", "")) + "*";
         declararSiNuevo(c.destino(), tipoC);
         return null;
     }
@@ -238,8 +238,15 @@ public final class InferenciaTiposC implements VisitanteCuadrupla<Void> {
 
     private void declararSiNuevo(String lugar, String tipoC) {
         if (lugar == null) return;
-        if (tiposConocidos.containsKey(lugar)) return;
-        tiposConocidos.put(lugar, tipoC);
+        if (tiposConocidos.containsKey(lugar)) {
+            String actual = tiposConocidos.get(lugar);
+            if ("void*".equals(actual) && tipoC != null && !"void*".equals(tipoC)) {
+                tiposConocidos.put(lugar, tipoC);
+                declaracionesLocales.put(lugar, tipoC);
+            }
+            return;
+        }
+            tiposConocidos.put(lugar, tipoC);
         declaracionesLocales.put(lugar, tipoC);
     }
 

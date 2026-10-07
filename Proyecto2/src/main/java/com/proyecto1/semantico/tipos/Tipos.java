@@ -69,6 +69,7 @@ public final class Tipos {
     /** ¿Los operandos de <, >, <=, >= son comparables entre sí? (solo numéricos). */
     public static boolean esComparableOrden(Tipo a, Tipo b) {
         if (esDesconocido(a) || esDesconocido(b)) return true;
+        if (a == TipoPrimitivo.CARACTER && b == TipoPrimitivo.CARACTER) return true;
         return a.esNumerico() && b.esNumerico();
     }
 

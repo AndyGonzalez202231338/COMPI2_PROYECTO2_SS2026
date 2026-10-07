@@ -42,6 +42,14 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
+        // Con "=" el objetivo se ESCRIBE, no se lee: marcarlo inicializado ANTES de
+        // verificarlo evita el falso "usada sin inicializar" en "boolean x; x = false;".
+
+        if (operador.equals("=") && objetivo instanceof Identificador idObj) {
+            Simbolo sObj = ambito.resolver(idObj.getNombre());
+            if (sObj != null) sObj.marcarInicializado();
+        }
+
         Tipo tIzq = objetivo.verificar(ambito, errores);
         Tipo tDer = valor.verificar(ambito, errores);
 

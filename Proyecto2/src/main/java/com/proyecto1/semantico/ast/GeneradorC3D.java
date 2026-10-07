@@ -235,11 +235,20 @@ public class GeneradorC3D {
     }
 
     public void emitirPrint(String v) {
-        tabla.agregar(new CuadruplaPrint(v));
+        emitirPrint(v, false);
+    }
+
+    public void emitirPrint(String v, boolean nuevaLinea) {
+        tabla.agregar(new CuadruplaPrint(v, nuevaLinea));
     }
 
     public void emitirRead(String x) {
-        tabla.agregar(new CuadruplaRead(x));
+        emitirRead(x, "cadena");
+    }
+
+    /** @param tipo nombre del tipo destino, para que Fase 4 use scanf o rt_read_string. */
+    public void emitirRead(String x, String tipo) {
+        tabla.agregar(new CuadruplaRead(x, tipo));
     }
 
     /** t = call f(nArgs argumentos); t puede ser null si no se usa el valor. */

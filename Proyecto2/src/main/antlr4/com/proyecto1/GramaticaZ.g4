@@ -28,7 +28,19 @@ constructorDeclaration
     ;
 
 methodDeclaration
-    : PUBLIC (tipo | VOID) ID LPAREN formalParameters? RPAREN block      #methodDeclarationDef
+    : PUBLIC (tipo | VOID) nombreMiembro LPAREN formalParameters? RPAREN block  #methodDeclarationDef
+    ;
+
+/** Nombre de miembro: ademas de ID acepta palabras reservadas que son exclusivas
+de Y o PigLatin. El lexer es compartido por los tres lenguajes, asi que sin
+esto un metodo de Z no podria llamarse "imprimir". **/
+nombreMiembro
+    : ID
+    | IMPRIMIR | LEER | SINO | CONTRARIO | ELEGIR | CASO | SIEMPRE
+    | PARA | MIENTRAS | HACER | CONTINUAR | ROMPER
+    | ESTO | SERIES | NUMERUS | DECIMALIS | TEXTUM | LITTERA
+    | FALSUS | VERUM | NOVUS | ALITER | FINIS | DUM | FACERE
+    | PER | PERGE | INTERRUMPE
     ;
 
 formalParameters
@@ -199,7 +211,7 @@ postfixExpression
 // Recursiva a la izquierda para poder encadenar: obj1.obj2.metodo(),
 // arreglo[i][j], f().g(), etc.
 primaryExpression
-    : primaryExpression PUNTO ID                                         #primarioCampo
+    : primaryExpression PUNTO nombreMiembro                              #primarioCampo
     | primaryExpression LPAREN argumentList? RPAREN                      #primarioLlamada
     | primaryExpression CORIZQ expression CORDER                         #primarioIndice
     | NEW ID LPAREN argumentList? RPAREN                                 #primarioInstanciaClase

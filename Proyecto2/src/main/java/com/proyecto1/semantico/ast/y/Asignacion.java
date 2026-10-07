@@ -32,6 +32,7 @@ public final class Asignacion extends NodoY implements InstruccionY {
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         Tipo tIzq = objetivo.verificar(ambito, errores);
+        if (valor instanceof Leer lectura) lectura.setTipoEsperado(tIzq);
         Tipo tDer = valor.verificar(ambito, errores);
 
         if (!Tipos.esAsignable(tIzq, tDer)) {

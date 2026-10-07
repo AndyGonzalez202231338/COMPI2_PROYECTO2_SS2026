@@ -104,7 +104,7 @@ public final class GeneradorStructsC {
 
         if (t instanceof TipoArreglo ta && ta.tieneLongitudConocida()) {
             // Y: "int[5]" dentro de un struct = "int arr[5];"
-            return tipoAC(ta.getBase()) + " " + m.getNombre() + "[" + ta.getLongitud() + "]";
+            return tipoAC(ta.getBase()) + "* " + m.getNombre();
         }
         // Todo lo demás: tipo + nombre. Si es arreglo sin longitud, tipoAC ya da
         // "int*", "Persona*", etc.

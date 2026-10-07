@@ -397,6 +397,10 @@ public class ASTBuilderPigLatin extends GramaticaPigLatinBaseVisitor<NodoAST> {
     @Override public NodoAST visitTipoLittera(GramaticaPigLatin.TipoLitteraContext ctx) {
         return new NodoTipoRef("littera", true, linea(ctx), columna(ctx));
     }
+
+    @Override public NodoAST visitTipoBool(GramaticaPigLatin.TipoBoolContext ctx) {
+        return new NodoTipoRef("falsus", true, linea(ctx), columna(ctx));
+    }
     @Override public NodoAST visitTipoFalsus(GramaticaPigLatin.TipoFalsusContext ctx) {
         return new NodoTipoRef("falsus", true, linea(ctx), columna(ctx));
     }
@@ -605,7 +609,7 @@ public class ASTBuilderPigLatin extends GramaticaPigLatinBaseVisitor<NodoAST> {
     @Override
     public NodoAST visitPrimariaCampo(GramaticaPigLatin.PrimariaCampoContext ctx) {
         ExpresionPigLatin objeto = (ExpresionPigLatin) visit(ctx.primaria());
-        return new AccesoCampo(objeto, ctx.ID().getText(), linea(ctx), columna(ctx));
+        return new AccesoCampo(objeto, ctx.nombreMiembro().getText(), linea(ctx), columna(ctx));
     }
 
     @Override
