@@ -133,6 +133,40 @@ public final class TraductorCuadrupla implements VisitanteCuadrupla<String> {
         return c.arreglo() + "[" + c.indice() + "] = " + c.valor() + ";";
     }
 
+    // Cuadruplas nuevas de la Fase 2 (cadenas y conversion). En C se traducen igual que antes: rt_concat, rt_strcmp y casts.
+    @Override
+    public String visitar(CuadruplaConcat c) {
+        String aTipo = tipoEfectivo(c.a());
+        String bTipo = tipoEfectivo(c.b());
+        String aLugar = "char*".equals(aTipo) ? c.a() : convertirAString(c.a(), aTipo);
+        String bLugar = "char*".equals(bTipo) ? c.b() : convertirAString(c.b(), bTipo);
+        return c.t() + " = rt_concat(" + aLugar + ", " + bLugar + ");";
+    }
+
+    @Override
+    public String visitar(CuadruplaCompCadena c) {
+        String cmp = "==".equals(c.operador()) ? "== 0" : "!= 0";
+        return c.t() + " = (rt_strcmp(" + c.a() + ", " + c.b() + ") " + cmp + ");";
+    }
+
+    @Override
+    public String visitar(CuadruplaConversion c) {
+        // Conversiones a cadena usan las funciones del runtime C.
+        if ("cadena".equals(c.tipoDestino())) {
+            String fn = switch (c.tipoOrigen()) {
+                case "entero" -> "rt_int_to_string";
+                case "flotante" -> "rt_double_to_string";
+                case "caracter" -> "rt_char_to_string";
+                case "bool" -> "rt_int_to_string";
+                default -> "rt_int_to_string";
+            };
+            return c.destino() + " = " + fn + "(" + c.valor() + ");";
+        }
+        // El resto son casts numericos (entero -> flotante, etc.)
+        String tipoC = TraductorTipos.nombreFuenteAC(c.tipoDestino());
+        return c.destino() + " = (" + tipoC + ") " + c.valor() + ";";
+    }
+
     @Override
     public String visitar(CuadruplaNewArray c) {
         List<String> ts = c.tamanos();

@@ -268,6 +268,61 @@ public class GeneradorC3D {
         return "L" + (contadorEtiquetas++);
     }
 
+    // ---------- Operadores logicos ----------
+
+    /**
+     * Genera "izq && der" o "izq || der" evaluando el lado derecho SOLO si hace falta:
+     *  &&  -> si izq es falso el resultado ya es falso y der no se evalua
+     *  ||  -> si izq es verdadero el resultado ya es verdadero y der no se evalua
+     * Importa para la semantica, no solo para la eficiencia: en
+     * "obj != null && obj.x > 0" evaluar obj.x con obj nulo truena, y en
+     * "a > 0 || f()" la llamada no debe ejecutarse (ni sus efectos) si a > 0.
+     *
+     * C3D para "a && b" (el de "||" es igual con if_true y "true"):
+     *      <codigo de a>              -> ta
+     *      if_false ta goto Lcorto    a es falso: ya no se evalua b
+     *      <codigo de b>              -> tb
+     *      t = tb
+     *      goto Lfin
+     *  Lcorto:
+     *      t = false
+     *  Lfin:
+     * @param operador
+     * @param izquierdo
+     * @param derecho
+     * @return
+     */
+    public ResultadoC3D generarLogicoCortoCircuito(String operador,
+                                                   java.util.function.Supplier<ResultadoC3D> izquierdo,
+                                                   java.util.function.Supplier<ResultadoC3D> derecho) {
+        boolean esAnd = operador.equals("&&");
+        String resultado = nuevoTemporal();
+        String etiquetaCorto = nuevaEtiqueta();
+        String etiquetaFin = nuevaEtiqueta();
+
+        ResultadoC3D a = izquierdo.get();
+        if (esAnd) {
+            emitirIfFalse(a.getLugar(), etiquetaCorto);
+        } else {
+            emitirIfTrue(a.getLugar(), etiquetaCorto);
+        }
+
+        ResultadoC3D b = derecho.get();
+        emitirAsignacion(b.getLugar(), resultado);
+        emitirGoto(etiquetaFin);
+
+        emitirEtiqueta(etiquetaCorto);
+        emitirAsignacion(esAnd ? "false" : "true", resultado);
+        emitirEtiqueta(etiquetaFin);
+
+        return ResultadoC3D.temporal(resultado, TipoPrimitivo.BOOL);
+    }
+
+    // true para los operadores que se generan con corto circuito.
+    public static boolean esLogicoCortoCircuito(String operador) {
+        return operador.equals("&&") || operador.equals("||");
+    }
+
     // ---------- Firmas de función (Fase 4) ----------
 
     /**
@@ -287,10 +342,14 @@ public class GeneradorC3D {
     }
 
     // ---------- Emisores tipados ----------
-    // Cada uno construye el record concreto de com.proyecto1.semantico.ast.cuadruplas
-    // que le corresponde. Ningún nodo de Y/Z/PigLatin necesita cambiar: siguen
-    // llamando a estos mismos métodos, con la misma firma que ya usaban.
 
+    /**
+     * Cada uno construye el record concreto de com.proyecto1.semantico.ast.cuadruplas
+     * que le corresponde. Ningún nodo de Y/Z/PigLatin necesita cambiar: siguen
+     * llamando a estos mismos métodos, con la misma firma que ya usaban.
+     * @param v
+     * @param x
+     */
     public void emitirAsignacion(String v, String x) {
         tabla.agregar(new CuadruplaAsignacion(v, x));
     }
@@ -299,8 +358,17 @@ public class GeneradorC3D {
         tabla.agregar(new CuadruplaBinaria(op, a, b, t));
     }
 
+    // Binaria con tipo explicito. El tipo es el nombre del TipoPrimitivo del resultado ("entero", "flotante", "bool", etc.).
+    public void emitirBinaria(String op, String a, String b, String t, String tipoDato) {
+        tabla.agregar(new CuadruplaBinaria(op, a, b, t, tipoDato));
+    }
+
     public void emitirUnaria(String op, String a, String t) {
         tabla.agregar(new CuadruplaUnaria(op, a, t));
+    }
+
+    public void emitirUnaria(String op, String a, String t, String tipoDato) {
+        tabla.agregar(new CuadruplaUnaria(op, a, t, tipoDato));
     }
 
     public void emitirGoto(String etiqueta) {
@@ -325,6 +393,22 @@ public class GeneradorC3D {
 
     public void emitirPrint(String v, boolean nuevaLinea) {
         tabla.agregar(new CuadruplaPrint(v, nuevaLinea));
+    }
+
+    public void emitirPrint(String v, boolean nuevaLinea, String tipoDato) {
+        tabla.agregar(new CuadruplaPrint(v, nuevaLinea, tipoDato));
+    }
+
+    public void emitirConcat(String a, String b, String t) {
+        tabla.agregar(new CuadruplaConcat(a, b, t));
+    }
+
+    public void emitirCompCadena(String operador, String a, String b, String t) {
+        tabla.agregar(new CuadruplaCompCadena(operador, a, b, t));
+    }
+
+    public void emitirConversion(String tipoOrigen, String tipoDestino, String valor, String destino) {
+        tabla.agregar(new CuadruplaConversion(tipoOrigen, tipoDestino, valor, destino));
     }
 
     public void emitirRead(String x) {

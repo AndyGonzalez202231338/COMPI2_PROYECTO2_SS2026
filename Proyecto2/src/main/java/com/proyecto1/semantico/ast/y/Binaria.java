@@ -69,12 +69,16 @@ public final class Binaria extends NodoY implements ExpresionY {
      * comparaciones y lógicos; DESCONOCIDO si algún operando es DESCONOCIDO (p. ej. un
      * Identificador, ver su Javadoc) o la combinación es inválida (el error semántico ya
      * se reportó en verificar()).
-     *
-     * Nota: && y || se emiten como operación binaria plana, SIN cortocircuito. El
-     * cortocircuito (saltos con backpatching) se tratará con las estructuras de control.
      */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
+        // && y || no evaluan siempre los dos lados: se generan con saltos.
+        if (GeneradorC3D.esLogicoCortoCircuito(operador)) {
+            return generador.generarLogicoCortoCircuito(operador,
+                    () -> izquierdo.generarC3D(generador),
+                    () -> derecho.generarC3D(generador));
+        }
+
         ResultadoC3D a = izquierdo.generarC3D(generador);
         ResultadoC3D b = derecho.generarC3D(generador);
 
@@ -86,7 +90,6 @@ public final class Binaria extends NodoY implements ExpresionY {
                 tipo = (r == null) ? TipoPrimitivo.DESCONOCIDO : r;
                 break;
             case "==": case "!=": case "<": case ">": case "<=": case ">=":
-            case "&&": case "||":
                 tipo = TipoPrimitivo.BOOL;
                 break;
             default:

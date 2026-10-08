@@ -28,8 +28,7 @@ public final class Println extends NodoZ implements ExpresionZ {
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         ResultadoC3D v = argumento.generarC3D(generador);
-        generador.emitirParam(v.getLugar());
-        generador.emitirCall("rt_println", 1, null);
+        generador.emitirPrint(v.getLugar(), true);
         return ResultadoC3D.vacio();
     }
 }

@@ -211,6 +211,24 @@ public final class InferenciaTiposC implements VisitanteCuadrupla<Void> {
     @Override public Void visitar(CuadruplaIndiceGuarda c){ return null; }
     @Override public Void visitar(CuadruplaCampoGuarda c) { return null; }
 
+    @Override
+    public Void visitar(CuadruplaConcat c) {
+        declararSiNuevo(c.t(), "char*");
+        return null;
+    }
+
+    @Override
+    public Void visitar(CuadruplaCompCadena c) {
+        declararSiNuevo(c.t(), "int");
+        return null;
+    }
+
+    @Override
+    public Void visitar(CuadruplaConversion c) {
+        declararSiNuevo(c.destino(), TraductorTipos.nombreFuenteAC(c.tipoDestino()));
+        return null;
+    }
+
     private String resolverTipoCampo(String objeto, String campo) {
         if (objeto == null || campo == null) return "int";
 
