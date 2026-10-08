@@ -27,4 +27,7 @@ public interface VisitanteCuadrupla<T> {
     T visitar(CuadruplaCampoGuarda c);
     T visitar(CuadruplaNew c);
     T visitar(CuadruplaNewArray c);
+    T visitar(CuadruplaConcat c);
+    T visitar(CuadruplaCompCadena c);
+    T visitar(CuadruplaConversion c);
 }

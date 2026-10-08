@@ -358,8 +358,17 @@ public class GeneradorC3D {
         tabla.agregar(new CuadruplaBinaria(op, a, b, t));
     }
 
+    // Binaria con tipo explicito. El tipo es el nombre del TipoPrimitivo del resultado ("entero", "flotante", "bool", etc.).
+    public void emitirBinaria(String op, String a, String b, String t, String tipoDato) {
+        tabla.agregar(new CuadruplaBinaria(op, a, b, t, tipoDato));
+    }
+
     public void emitirUnaria(String op, String a, String t) {
         tabla.agregar(new CuadruplaUnaria(op, a, t));
+    }
+
+    public void emitirUnaria(String op, String a, String t, String tipoDato) {
+        tabla.agregar(new CuadruplaUnaria(op, a, t, tipoDato));
     }
 
     public void emitirGoto(String etiqueta) {
@@ -384,6 +393,22 @@ public class GeneradorC3D {
 
     public void emitirPrint(String v, boolean nuevaLinea) {
         tabla.agregar(new CuadruplaPrint(v, nuevaLinea));
+    }
+
+    public void emitirPrint(String v, boolean nuevaLinea, String tipoDato) {
+        tabla.agregar(new CuadruplaPrint(v, nuevaLinea, tipoDato));
+    }
+
+    public void emitirConcat(String a, String b, String t) {
+        tabla.agregar(new CuadruplaConcat(a, b, t));
+    }
+
+    public void emitirCompCadena(String operador, String a, String b, String t) {
+        tabla.agregar(new CuadruplaCompCadena(operador, a, b, t));
+    }
+
+    public void emitirConversion(String tipoOrigen, String tipoDestino, String valor, String destino) {
+        tabla.agregar(new CuadruplaConversion(tipoOrigen, tipoDestino, valor, destino));
     }
 
     public void emitirRead(String x) {

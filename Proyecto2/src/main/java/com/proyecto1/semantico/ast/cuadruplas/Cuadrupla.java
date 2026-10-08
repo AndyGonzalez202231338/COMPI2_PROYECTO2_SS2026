@@ -18,7 +18,8 @@ public sealed interface Cuadrupla
                 CuadruplaBeginFunc, CuadruplaEndFunc,
                 CuadruplaIndiceCarga, CuadruplaIndiceGuarda,
                 CuadruplaCampoCarga, CuadruplaCampoGuarda,
-                CuadruplaNew, CuadruplaNewArray {
+                CuadruplaNew, CuadruplaNewArray,
+                CuadruplaConcat, CuadruplaCompCadena,CuadruplaConversion{
 
     /** Formato legible para humanos: "t0 = a + b", "goto L1", "if_false t0 goto L2", etc. */
     String toStringLegible();

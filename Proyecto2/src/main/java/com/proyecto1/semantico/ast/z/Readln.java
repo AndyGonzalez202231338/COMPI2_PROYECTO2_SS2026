@@ -34,7 +34,7 @@ public final class Readln extends NodoZ implements ExpresionZ {
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         String t = generador.nuevoTemporal();
-        generador.emitirCall("rt_readln", 0, t);
+        generador.emitirRead(t, "cadena");
         return ResultadoC3D.temporal(t, TipoPrimitivo.CADENA);
     }
 }
