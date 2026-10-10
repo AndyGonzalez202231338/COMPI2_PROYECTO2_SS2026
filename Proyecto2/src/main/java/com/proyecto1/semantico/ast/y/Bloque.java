@@ -18,6 +18,7 @@ import java.util.List;
 public final class Bloque extends NodoY {
 
     private final List<InstruccionY> instrucciones;
+    private Ambito ambitoBloque;
 
     public Bloque(List<InstruccionY> instrucciones, int linea, int columna) {
         super(linea, columna);
@@ -30,6 +31,7 @@ public final class Bloque extends NodoY {
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
+        this.ambitoBloque = ambito;
         for (InstruccionY i : instrucciones) i.verificar(ambito, errores);
         return TipoPrimitivo.VOID;
     }
@@ -40,7 +42,14 @@ public final class Bloque extends NodoY {
      */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
+        Ambito anterior = null;
+        if (ambitoBloque != null) {
+            anterior = generador.entrarAmbito(ambitoBloque);
+        }
         for (InstruccionY i : instrucciones) i.generarC3D(generador);
+        if (anterior != null) {
+            generador.salirAmbito(anterior);
+        }
         return ResultadoC3D.vacio();
     }
 }
