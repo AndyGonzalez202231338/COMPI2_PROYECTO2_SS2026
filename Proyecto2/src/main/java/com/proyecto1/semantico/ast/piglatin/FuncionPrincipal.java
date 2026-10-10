@@ -19,6 +19,7 @@ import java.util.List;
 public final class FuncionPrincipal extends NodoPigLatin {
 
     private final List<InstruccionPigLatin> cuerpo;
+    private AmbitoBloque ambitoPropio;
 
     public FuncionPrincipal(List<InstruccionPigLatin> cuerpo, int linea, int columna) {
         super(linea, columna);
@@ -32,6 +33,7 @@ public final class FuncionPrincipal extends NodoPigLatin {
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         AmbitoBloque amb = new AmbitoBloque(ambito, false);
+        this.ambitoPropio = amb;
         for (InstruccionPigLatin i : cuerpo) i.verificar(amb, errores);
         return TipoPrimitivo.VOID;
     }
@@ -63,4 +65,6 @@ public final class FuncionPrincipal extends NodoPigLatin {
         generador.emitirEndFunc();
         return ResultadoC3D.vacio();
     }
+
+    public AmbitoBloque getAmbitoPropio() { return ambitoPropio; }
 }

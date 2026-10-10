@@ -21,6 +21,7 @@ public final class Funcion extends NodoY {
     private final Bloque cuerpo;
     private List<Tipo> tiposParamsCache;
     private Tipo tipoRetornoCache;
+    private AmbitoFuncion ambitoPropio;
 
     public Funcion(String nombre, List<Parametro> parametros, NodoTipoRef tipoRetorno,
                    Bloque cuerpo, int linea, int columna) {
@@ -40,6 +41,7 @@ public final class Funcion extends NodoY {
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         Simbolo simbolo = ambito.resolverLocal(nombre);
         AmbitoFuncion amb = new AmbitoFuncion(ambito, simbolo);
+        this.ambitoPropio = amb;
 
         tiposParamsCache = new ArrayList<>();
         for (Parametro p : parametros) {
@@ -101,4 +103,6 @@ public final class Funcion extends NodoY {
         generador.emitirEndFunc();
         return ResultadoC3D.vacio();
     }
+
+    public AmbitoFuncion getAmbitoPropio() { return ambitoPropio; }
 }

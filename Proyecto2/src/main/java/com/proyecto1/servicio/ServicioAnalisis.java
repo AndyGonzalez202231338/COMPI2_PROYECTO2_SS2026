@@ -9,11 +9,14 @@ import com.proyecto1.semantico.AnalizadorSemanticoPigLatin;
 import com.proyecto1.semantico.AnalizadorSemanticoY;
 import com.proyecto1.semantico.AnalizadorSemanticoZ;
 import com.proyecto1.semantico.ast.GeneradorC3D;
+import com.proyecto1.semantico.ast.z.Constructor;
+import com.proyecto1.semantico.ast.z.Metodo;
 import com.proyecto1.semantico.errores.ErrorSemantico;
 import com.proyecto1.semantico.errores.ManejadorErrores;
 import com.proyecto1.semantico.piglatin.ASTBuilderPigLatin;
 import com.proyecto1.semantico.tabla.AmbitoGlobal;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
+import com.proyecto1.semantico.tabla.LayoutMemoria;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
@@ -116,6 +119,19 @@ public class ServicioAnalisis {
             erroresSemanticos = errores.obtenerErrores();
 
             if (erroresSemanticos.isEmpty()) {
+                LayoutMemoria layout = new LayoutMemoria();
+                for (Simbolo s : ambitoGlobal.simbolosLocales()) {
+                    if (s.getCategoria() == CategoriaSimbolo.ESTRUCTURA) {
+                        layout.asignarEstructura(s);
+                    }
+                }
+                for (com.proyecto1.semantico.ast.y.Funcion fn : programa.getFunciones()) {
+                    Simbolo sFn = ambitoGlobal.resolverLocal(fn.getNombre());
+                    if (sFn != null && fn.getAmbitoPropio() != null) {
+                        layout.asignarFuncion(sFn, fn.getAmbitoPropio());
+                    }
+                }
+
                 try {
                     generadorC3D = new GeneradorC3D(ambitoGlobal);
                     programa.generarC3D(generadorC3D);
@@ -180,6 +196,21 @@ public class ServicioAnalisis {
             }
 
             if (erroresSemanticos.isEmpty()) {
+                LayoutMemoria layout = new LayoutMemoria();
+                layout.asignarClase(sClase);
+                for (Metodo m : clase.getMetodos()) {
+                    if (m.getSimbolo() != null && m.getAmbitoPropio() != null) {
+                        layout.asignarFuncion(m.getSimbolo(), m.getAmbitoPropio());
+                    }
+                }
+                for (Constructor ctor : clase.getConstructores()) {
+                    if (ctor.getAmbitoPropio() != null) {
+                        Simbolo sCtor = buscarConstructor(sClase, ctor);
+                        if (sCtor != null) {
+                            layout.asignarFuncion(sCtor, ctor.getAmbitoPropio());
+                        }
+                    }
+                }
                 try {
                     generadorC3D = new GeneradorC3D(ambitoInterno);
                     clase.generarC3D(generadorC3D);
@@ -245,6 +276,28 @@ public class ServicioAnalisis {
             advertencias = imports.getAdvertencias();
 
             if (todos.isEmpty()) {
+                LayoutMemoria layout = new LayoutMemoria();
+                for (Simbolo s : globalPig.simbolosLocales()) {
+                    if (s.getCategoria() == CategoriaSimbolo.ESTRUCTURA
+                            || s.getCategoria() == CategoriaSimbolo.CLASE) {
+                        if (s.getCategoria() == CategoriaSimbolo.ESTRUCTURA) {
+                            layout.asignarEstructura(s);
+                        } else {
+                            layout.asignarClase(s);
+                        }
+                    }
+                }
+                // Se arranca desde globalPig (no desde el ambito propio de main) porque
+                // las variables de VARIABILES > se declaran directamente en globalPig, un
+                // ambito PADRE del cuerpo de MAIOR. Si se empezara desde el ambito de main,
+                // esas variables globales nunca se verian y una "g" interna con el mismo
+                // nombre que una "g" de VARIABILES colisionaria en el C3D. Como globalPig
+                // ya tiene al ambito de main como hijo (relacion armada por el constructor
+                // de Ambito), el recorrido llega igual a todo lo declarado dentro de MAIOR.
+                Simbolo sMain = new Simbolo("main", CategoriaSimbolo.FUNCION,
+                        com.proyecto1.semantico.tipos.TipoPrimitivo.VOID, 0, 0);
+                layout.asignarFuncion(sMain, globalPig);
+
                 try {
                     generadorC3D = new GeneradorC3D(globalPig);
                     programa.generarC3D(generadorC3D);
@@ -468,5 +521,15 @@ public class ServicioAnalisis {
             params.add(new GeneradorC3D.ParametroFirma(p.getNombre(), p.getTipo()));
         }
         return new GeneradorC3D.Firma(etiqueta, params, tipoRetorno, true);
+    }
+
+    // Busca el Simbolo CONSTRUCTOR que corresponde a este nodo Constructor, comparando
+    // por cantidad de parametros (suficiente porque dos constructores de la misma clase
+    // nunca tienen la misma aridad Y los mismos tipos sin ser el mismo).
+    private static Simbolo buscarConstructor(Simbolo clase, Constructor ctor) {
+        for (Simbolo s : clase.getConstructoresDeclarados()) {
+            if (s.getParametros().size() == ctor.getParametros().size()) return s;
+        }
+        return null;
     }
 }

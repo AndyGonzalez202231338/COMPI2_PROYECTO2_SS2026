@@ -19,6 +19,7 @@ import java.util.List;
 public final class Bloque extends NodoPigLatin implements InstruccionPigLatin {
 
     private final List<InstruccionPigLatin> instrucciones;
+    private AmbitoBloque ambitoPropio;
 
     public Bloque(List<InstruccionPigLatin> instrucciones, int linea, int columna) {
         super(linea, columna);
@@ -32,6 +33,7 @@ public final class Bloque extends NodoPigLatin implements InstruccionPigLatin {
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         AmbitoBloque amb = new AmbitoBloque(ambito, false);
+        this.ambitoPropio = amb;
         for (InstruccionPigLatin i : instrucciones) i.verificar(amb, errores);
         return TipoPrimitivo.VOID;
     }
@@ -43,7 +45,14 @@ public final class Bloque extends NodoPigLatin implements InstruccionPigLatin {
      */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
+        Ambito anterior = null;
+        if (ambitoPropio != null) {
+            anterior = generador.entrarAmbito(ambitoPropio);
+        }
         for (InstruccionPigLatin i : instrucciones) i.generarC3D(generador);
+        if (anterior != null) {
+            generador.salirAmbito(anterior);
+        }
         return ResultadoC3D.vacio();
     }
 }
