@@ -28,10 +28,14 @@ public class Simbolo {
      * Reservado para la Fase 3 (generación de C3D): posición/offset donde vivirá este símbolo
      */
     private int offset = -1;
+    private String nombreUnico;
+    private int tamanoPalabras = -1;
+    private int tamanoFrame = -1;
+    private int tamanoObjeto = -1;
 
     /**
      * Cuántos elementos tiene cada dimensión, si el símbolo es un arreglo declarado con
-     * tamaño fijo (Y?: "entero notas[5]"; Z: se calcula en tiempo de ejecución con "new").
+     * tamaño fijo (Y: "entero notas[5]"; Z: se calcula en tiempo de ejecución con "new").
      */
     private final List<Integer> tamanosArreglo = new ArrayList<>();
 
@@ -373,6 +377,22 @@ public class Simbolo {
         };
         return categoriaTexto + " '" + nombre + "'";
     }
+
+    public String getNombreC3D() {
+        return (nombreUnico != null) ? nombreUnico : nombre;
+    }
+
+    public String getNombreUnico() { return nombreUnico; }
+    public void setNombreUnico(String nombreUnico) { this.nombreUnico = nombreUnico; }
+
+    public int getTamanoPalabras() { return tamanoPalabras; }
+    public void setTamanoPalabras(int tamanoPalabras) { this.tamanoPalabras = tamanoPalabras; }
+
+    public int getTamanoFrame() { return tamanoFrame; }
+    public void setTamanoFrame(int tamanoFrame) { this.tamanoFrame = tamanoFrame; }
+
+    public int getTamanoObjeto() { return tamanoObjeto; }
+    public void setTamanoObjeto(int tamanoObjeto) { this.tamanoObjeto = tamanoObjeto; }
 
     @Override
     public String toString() {

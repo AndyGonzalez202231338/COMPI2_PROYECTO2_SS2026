@@ -10,19 +10,6 @@ import com.proyecto1.semantico.tipos.Tipo;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
 import com.proyecto1.semantico.tipos.Tipos;
 
-/**
- * assignmentExpression (#assignmentExpressionDef) cuando trae operador:
- * "objetivo op= valor". implementa ExpresionZ, NO InstruccionZ —
- * a diferencia de Y?, en la gramática de Z la asignación vive DENTRO de la jerarquía
- * de expresiones (así "a = (b = 5)" es válido). Una asignación usada como sentencia
- * suelta ("x = 5;") queda envuelta en ExpresionStmt, igual que cualquier otra
- * expresión.
- *
- * El objetivo se guarda ya armado como ExpresionZ (una cadena de
- * Identificador envuelto en AccesoCampo/Indice), exactamente
- * como sale de visitar "primaryExpression" normalmente — no hace falta lógica
- * distinta de encadenado para el lado izquierdo.
- */
 public final class Asignacion extends NodoZ implements ExpresionZ {
 
     private final ExpresionZ objetivo;
@@ -64,30 +51,6 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
         return tIzq;
     }
 
-    /**
-     * Emite:
-     *
-     *   x = v: el C3D del RHS y la escritura en el lugar del lvalue
-     *       (que según el caso puede ser (=, v, -, x), (.=, this, x, v),
-     *       Devuelve un ResultadoC3D con el lugar del RHS y el tipo del lvalue,
-     *       para que a = (b = 5) encadene.
-     *   x op= v: primero se lee el valor actual del lvalue
-     *       #cargarDe}, se emite la binaria t = actual op v, y se
-     *       guarda t en el lvalue. Devuelve temporal(t, tipoLvalue).
-     *
-     * Orden de evaluación: primero se resuelve el lvalue (evalúa
-     * subexpresiones del lvalue: obj en obj.f = v, arr e
-     * {idx en arr[i] = v), luego el RHS. Así arr[i()] = f()
-     * evalúa i() antes que f().
-     *
-     * 4 casos de lvalue en Z:
-     *   Identificador con categoría VARIABLE/PARAMETRO:
-     *       variable local.
-     *   Identificador} con categoría ATRIBUTO: acceso implícito
-     *       a this.<nombre>. Es el caso que Z añade sobre Y.<
-     *   AccesoCampo}: obj.campo.
-     *   Indice: arr[i].
-     */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         LValue lv = resolverLValue(objetivo, generador);
@@ -111,12 +74,6 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
 
     // ---------- ayudantes privados ----------
 
-    /**
-     * Descripción "sin resolver a dirección" de un lvalue: guarda los lugares donde
-     * quedaron la base (nombre de variable, temporal, o el literal "this"),
-     * el nombre del campo (si aplica) y el índice ya evaluado (si aplica). Solo uno
-     * de {campo, indice} es no-null.
-     */
     private record LValue(String base, String campo, String indice, Tipo tipo) {}
 
     private LValue resolverLValue(ExpresionZ objetivo, GeneradorC3D generador) {
@@ -125,21 +82,22 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
             String nombre = id.getNombre();
             Tipo tipo = TipoPrimitivo.DESCONOCIDO;
             CategoriaSimbolo cat = null;
+            Simbolo simb = null;
 
             Ambito amb = generador.getAmbito();
             if (amb != null) {
-                Simbolo s = amb.resolver(nombre);
-                if (s != null) {
-                    tipo = s.getTipo();
-                    cat  = s.getCategoria();
+                simb = amb.resolver(nombre);
+                if (simb != null) {
+                    tipo = simb.getTipo();
+                    cat  = simb.getCategoria();
                 }
             }
             if (cat == CategoriaSimbolo.ATRIBUTO) {
-                // Acceso implícito a "this.<nombre>".
                 return new LValue("this", nombre, null, tipo);
             }
-            // Variable local o parámetro.
-            return new LValue(nombre, null, null, tipo);
+            // Variable local o parametro: usar el nombre unico para evitar colisiones.
+            String nombreC3D = (simb != null) ? simb.getNombreC3D() : nombre;
+            return new LValue(nombreC3D, null, null, tipo);
         }
 
         // Caso 3: obj.campo

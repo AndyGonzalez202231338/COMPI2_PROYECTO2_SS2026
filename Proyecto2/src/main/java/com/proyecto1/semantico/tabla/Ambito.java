@@ -24,8 +24,14 @@ public abstract class Ambito {
      */
     protected final List<Simbolo> simbolosEnOrden = new ArrayList<>();
 
+    private final List<Ambito> hijos = new ArrayList<>();
+
     protected Ambito(Ambito padre) {
         this.padre = padre;
+
+        if (padre != null) {
+            padre.hijos.add(this);
+        }
     }
 
     public Ambito getPadre() { return padre; }
@@ -92,6 +98,10 @@ public abstract class Ambito {
         Ambito actual = this;
         while (actual.padre != null) actual = actual.padre;
         return (AmbitoGlobal) actual;
+    }
+
+    public List<Ambito> getHijos() {
+        return hijos;
     }
 
     /** Descripción usada en mensajes de error/depuración ("ámbito global", "función 'foo'", etc.). */

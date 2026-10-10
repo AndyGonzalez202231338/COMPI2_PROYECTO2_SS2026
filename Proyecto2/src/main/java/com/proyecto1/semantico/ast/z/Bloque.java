@@ -13,6 +13,7 @@ import java.util.List;
 public final class Bloque extends NodoZ implements InstruccionZ {
 
     private final List<InstruccionZ> instrucciones;
+    private Ambito ambitoBloque;
 
     public Bloque(List<InstruccionZ> instrucciones, int linea, int columna) {
         super(linea, columna);
@@ -25,6 +26,7 @@ public final class Bloque extends NodoZ implements InstruccionZ {
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
+        this.ambitoBloque = ambito;
         for (InstruccionZ i : instrucciones) i.verificar(ambito, errores);
         return TipoPrimitivo.VOID;
     }
@@ -35,7 +37,14 @@ public final class Bloque extends NodoZ implements InstruccionZ {
      */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
+        Ambito anterior = null;
+        if (ambitoBloque != null) {
+            anterior = generador.entrarAmbito(ambitoBloque);
+        }
         for (InstruccionZ i : instrucciones) i.generarC3D(generador);
+        if (anterior != null) {
+            generador.salirAmbito(anterior);
+        }
         return ResultadoC3D.vacio();
     }
 }

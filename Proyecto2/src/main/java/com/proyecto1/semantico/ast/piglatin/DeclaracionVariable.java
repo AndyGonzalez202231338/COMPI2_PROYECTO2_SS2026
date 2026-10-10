@@ -20,14 +20,6 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
     private final String nombreTipoEstructura;             // solo si categoria == ESTRUCTURA (el ID tras ':')
     private final InicializadorArreglo inicializadorEstructura; // solo si categoria == ESTRUCTURA (obligatorio)
 
-    /**
-     * Tipo resuelto por verificar(). Se cachea aquí porque generarC3D() NO puede
-     * depender del ámbito del generador: las variables locales del MAIOR se
-     * declaran en un AmbitoBloque interno que ya no está activo cuando se
-     * traduce a C3D. Sin este cache, generarC3D no sabría que "direccion1" es
-     * Direccion (creería que es un arreglo) y emitiría `new int[2]` en vez de
-     * `new Direccion`.
-     */
     private Tipo tipoCache;
 
     private DeclaracionVariable(CategoriaDeclaracionVariable categoria, String nombre, NodoTipoRef tipo,
@@ -42,14 +34,12 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
         this.inicializadorEstructura = inicializadorEstructura;
     }
 
-    /** esto ID : tipo (= expresion)? (#declaracionVarConTipo). inicializador puede ser null. */
     public static DeclaracionVariable conTipo(String nombre, NodoTipoRef tipo, ExpresionPigLatin inicializador,
                                               int linea, int columna) {
         return new DeclaracionVariable(CategoriaDeclaracionVariable.CON_TIPO, nombre, tipo, inicializador,
                 null, null, linea, columna);
     }
 
-    /** esto ID : ID inicializadorArreglo (#declaracionVarEstructura). */
     public static DeclaracionVariable estructura(String nombre, String nombreTipoEstructura,
                                                  InicializadorArreglo inicializadorEstructura,
                                                  int linea, int columna) {
@@ -57,7 +47,6 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                 nombreTipoEstructura, inicializadorEstructura, linea, columna);
     }
 
-    /** esto ID : expresion (#declaracionVarSoloValor). El tipo se infiere del valor. */
     public static DeclaracionVariable soloValor(String nombre, ExpresionPigLatin inicializador,
                                                 int linea, int columna) {
         return new DeclaracionVariable(CategoriaDeclaracionVariable.SOLO_VALOR, nombre, null, inicializador,
@@ -81,12 +70,6 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                 t = tipo.resolver(ambito, errores);
                 this.tipoCache = t;
 
-                // Caso especial: "tipo {v1, v2, ...}" donde "tipo" es estructura/clase.
-                // El parser lo clasifica como CON_TIPO (porque "Direccion" es un ID válido
-                // como tipoBase, y "{...}" es una expresión válida como inicializador),
-                // pero semánticamente es un literal POSICIONAL de estructura, no de arreglo.
-                // Validamos campo por campo y anulamos initAUsar para que el chequeo
-                // genérico de abajo no intente esAsignable(Direccion, cadena[]).
                 if (inicializador instanceof InicializadorArreglo lit
                         && (t instanceof TipoEstructura || t instanceof TipoClase)) {
                     Simbolo defStruct = (t instanceof TipoEstructura te)
@@ -122,7 +105,6 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                 }
                 break;
             case SOLO_VALOR:
-                // El tipo se infiere del valor
                 t = inicializador.verificar(ambito, errores);
                 this.tipoCache = t;
                 break;
@@ -145,10 +127,6 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                 }
                 this.tipoCache = t;
 
-                // El {...} de una declaración ESTRUCTURA es un literal POSICIONAL de estructura,
-                // NO un arreglo: se valida campo por campo contra los campos reales del tipo,
-                // en el mismo orden que usaría generarC3D. No se llama a
-                // inicializadorEstructura.verificar(...) porque ese método asume arreglo.
                 if (inicializadorEstructura != null) {
                     List<Simbolo> campos = new ArrayList<>();
                     for (Simbolo m : s.getMiembrosEnOrden()) {
@@ -199,12 +177,16 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
 
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
+        // Resolver nombre unico para evitar colisiones entre bloques.
+        String destino = nombre;
+        Ambito amb = generador.getAmbito();
+        if (amb != null) {
+            Simbolo sv = amb.resolver(nombre);
+            if (sv != null) destino = sv.getNombreC3D();
+        }
+
         switch (categoria) {
             case CON_TIPO: {
-                // ¿Es un literal de estructura "Tipo {v1, v2, ...}"?
-                // Se consulta tipoCache (campo del nodo), no el ámbito del generador:
-                // las locales del MAIOR viven en un AmbitoBloque que ya no está activo
-                // cuando se traduce a C3D.
                 if (inicializador instanceof InicializadorArreglo lit
                         && (tipoCache instanceof TipoEstructura || tipoCache instanceof TipoClase)) {
 
@@ -227,26 +209,22 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                         ResultadoC3D v = valores.get(i).generarC3D(generador);
                         generador.emitirGuardarCampo(t, campos.get(i).getNombre(), v.getLugar());
                     }
-                    generador.emitirAsignacion(t, nombre);
+                    generador.emitirAsignacion(t, destino);
                     return ResultadoC3D.vacio();
                 }
 
-                // Camino normal: variable escalar con inicializador opcional.
                 if (inicializador != null) {
                     ResultadoC3D v = inicializador.generarC3D(generador);
-                    generador.emitirAsignacion(v.getLugar(), nombre);
+                    generador.emitirAsignacion(v.getLugar(), destino);
                 }
                 return ResultadoC3D.vacio();
             }
             case SOLO_VALOR: {
-                // Inicializador obligatorio por gramática.
                 ResultadoC3D v = inicializador.generarC3D(generador);
-                generador.emitirAsignacion(v.getLugar(), nombre);
+                generador.emitirAsignacion(v.getLugar(), destino);
                 return ResultadoC3D.vacio();
             }
             case ESTRUCTURA: {
-                // t = new Tipo (malloc); luego t.campo_i = v_i en el ORDEN de declaración
-                // de los campos (getMiembrosEnOrden(), no getMiembros()); luego nombre = t.
                 Simbolo s = (tipoCache instanceof TipoEstructura te)
                         ? te.getDefinicion()
                         : (tipoCache instanceof TipoClase tc)
@@ -272,7 +250,7 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                     generador.emitirGuardarCampo(t, campos.get(i).getNombre(), v.getLugar());
                 }
 
-                generador.emitirAsignacion(t, nombre);
+                generador.emitirAsignacion(t, destino);
                 return ResultadoC3D.vacio();
             }
             default:

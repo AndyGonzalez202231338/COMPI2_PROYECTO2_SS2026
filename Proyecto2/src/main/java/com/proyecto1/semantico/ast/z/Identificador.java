@@ -68,11 +68,12 @@ public final class Identificador extends NodoZ implements ExpresionZ {
         Tipo tipo = TipoPrimitivo.DESCONOCIDO;
         CategoriaSimbolo categoria = null;
 
+        Simbolo simb = null;
         if (ambito != null) {
-            Simbolo s = ambito.resolver(nombre);
-            if (s != null && s.getTipo() != null) {
-                tipo = s.getTipo();
-                categoria = s.getCategoria();
+            simb = ambito.resolver(nombre);
+            if (simb != null && simb.getTipo() != null) {
+                tipo = simb.getTipo();
+                categoria = simb.getCategoria();
             }
         }
 
@@ -82,7 +83,8 @@ public final class Identificador extends NodoZ implements ExpresionZ {
             return ResultadoC3D.temporal(t, tipo);
         }
 
-        // Variable local o parámetro: igual que en Y.
-        return ResultadoC3D.valor(nombre, tipo);
+        // Variable local o parametro: usar nombre unico para evitar colisiones.
+        String nombreC3D = (simb != null) ? simb.getNombreC3D() : nombre;
+        return ResultadoC3D.valor(nombreC3D, tipo);
     }
 }

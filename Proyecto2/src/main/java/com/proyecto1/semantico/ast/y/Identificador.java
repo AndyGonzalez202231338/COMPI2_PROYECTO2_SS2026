@@ -36,26 +36,21 @@ public final class Identificador extends NodoY implements ExpresionY {
         return s.getTipo();
     }
 
-    /**
-     * Emite: NADA (leer una variable no necesita cuádruplas).
-     * Devuelve: ResultadoC3D.valor(nombre, tipo), donde el tipo se resuelve
-     * consultando el Ámbito del generador: generador.getAmbito().resolver(nombre).
-     * Cae a TipoPrimitivo#DESCONOCIDO si el generador no tiene ámbito, si el
-     * símbolo no se encuentra o si el símbolo no tiene tipo.
-     */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
-        //entero x = 10
         Tipo tipo = TipoPrimitivo.DESCONOCIDO;
         Ambito ambito = generador.getAmbito();
         if (ambito != null) {
-            //es global o pertenece a funcion o ciclo
             Simbolo s = ambito.resolver(nombre);
             if (s != null && s.getTipo() != null) {
                 tipo = s.getTipo();
             }
         }
-        //(x, entero)
-        return ResultadoC3D.valor(nombre, tipo);
+        String nombreC3D = nombre;
+        if (ambito != null) {
+            Simbolo s = ambito.resolver(nombre);
+            if (s != null) nombreC3D = s.getNombreC3D();
+        }
+        return ResultadoC3D.valor(nombreC3D, tipo);
     }
 }
