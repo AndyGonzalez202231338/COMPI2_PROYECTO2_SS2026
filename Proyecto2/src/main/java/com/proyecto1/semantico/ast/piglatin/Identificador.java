@@ -30,9 +30,6 @@ public final class Identificador extends NodoPigLatin implements ExpresionPigLat
         return s.getTipo();
     }
 
-    /**
-     * Emite: NADA (leer una variable no necesita cuádruplas).
-     */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         Tipo tipo = TipoPrimitivo.DESCONOCIDO;
@@ -43,6 +40,11 @@ public final class Identificador extends NodoPigLatin implements ExpresionPigLat
                 tipo = s.getTipo();
             }
         }
-        return ResultadoC3D.valor(nombre, tipo);
+        String nombreC3D = nombre;
+        if (ambito != null) {
+            Simbolo s = ambito.resolver(nombre);
+            if (s != null) nombreC3D = s.getNombreC3D();
+        }
+        return ResultadoC3D.valor(nombreC3D, tipo);
     }
 }

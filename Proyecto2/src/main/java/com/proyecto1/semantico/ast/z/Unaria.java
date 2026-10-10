@@ -148,7 +148,14 @@ public final class Unaria extends NodoZ implements ExpresionZ {
         if (esAtributo) {
             generador.emitirGuardarCampo("this", nombre, v);
         } else {
-            generador.emitirAsignacion(v, nombre);
+            // Usar nombre unico si existe.
+            String dest = nombre;
+            Ambito amb = generador.getAmbito();
+            if (amb != null) {
+                Simbolo sv = amb.resolver(nombre);
+                if (sv != null) dest = sv.getNombreC3D();
+            }
+            generador.emitirAsignacion(v, dest);
         }
     }
 }

@@ -21,6 +21,9 @@ public final class DeclaracionVariable extends NodoZ implements InstruccionZ {
     private final String nombre;
     private final ExpresionZ inicializador; // null si no hay "= expresion"
 
+    // Simbolo creado en verificar(). Se usa en generarC3D para obtener el nombre unico.
+    private Simbolo simbolo;
+
     public DeclaracionVariable(NodoTipoRef tipo, String nombre, ExpresionZ inicializador, int linea, int columna) {
         super(linea, columna);
         this.tipo = tipo;
@@ -54,6 +57,7 @@ public final class DeclaracionVariable extends NodoZ implements InstruccionZ {
             errores.reportar(linea, columna, "Variable ya declarada en este ámbito: '" + nombre + "'");
             return TipoPrimitivo.DESCONOCIDO;
         }
+        this.simbolo = s;
         if (inicializador != null) {
             Tipo tInit = inicializador.verificar(ambito, errores);
             if (!Tipos.esAsignable(t, tInit))
@@ -73,7 +77,9 @@ public final class DeclaracionVariable extends NodoZ implements InstruccionZ {
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         if (inicializador != null) {
             ResultadoC3D v = inicializador.generarC3D(generador);
-            generador.emitirAsignacion(v.getLugar(), nombre);
+            // Usar el nombre unico del Simbolo para evitar colisiones entre bloques.
+            String dest = (simbolo != null) ? simbolo.getNombreC3D() : nombre;
+            generador.emitirAsignacion(v.getLugar(), dest);
         }
         return ResultadoC3D.vacio();
     }

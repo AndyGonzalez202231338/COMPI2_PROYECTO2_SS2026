@@ -66,29 +66,14 @@ public final class DeclaracionVariable extends NodoY implements InstruccionY {
         return TipoPrimitivo.VOID;
     }
 
-    /**
-     * Tres casos, en este orden:
-     *   Variable escalar (tamanosArreglo vacío): igual que antes — sin
-     *       inicializador no emite nada; con inicializador emite nombre = v.
-     *   Arreglo sin inicializador: no emite NADA.  Emitir cuádruplas aquí sería ruido.
-     *   Arreglo con inicializador: ListaLiteral: emite
-     *       arr[i] = v_i por cada elemento del literal, USANDO EL NOMBRE DEL
-     *       ARREGLO como base (no un temporal intermedio).
-     * Un inicializador de arreglo que NO sea ListaLiteral (una variable de
-     * arreglo, una llamada que devuelve arreglo, etc.) sigue siendo deuda explícita:
-     * C no permite asignar arreglos y Y? tampoco lo contempla hoy.
-     */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         // ---------- Caso arreglo ----------
         if (!tamanosArreglo.isEmpty()) {
             if (inicializador == null) {
-                // Nada que emitir: Fase 4 reserva las celdas leyendo la longitud del
-                // TipoArreglo del símbolo.
                 return ResultadoC3D.vacio();
             }
             if (inicializador instanceof ListaLiteral lit) {
-                // Init elemento a elemento sobre el propio nombre del arreglo: t[i] = v_i.
                 List<ExpresionY> elems = lit.getElementos();
                 for (int i = 0; i < elems.size(); i++) {
                     ResultadoC3D v = elems.get(i).generarC3D(generador);
@@ -103,7 +88,13 @@ public final class DeclaracionVariable extends NodoY implements InstruccionY {
         // ---------- Caso variable escalar (como antes) ----------
         if (inicializador != null) {
             ResultadoC3D v = inicializador.generarC3D(generador);
-            generador.emitirAsignacion(v.getLugar(), nombre);
+            String dest = nombre;
+            Ambito amb = generador.getAmbito();
+            if (amb != null) {
+                Simbolo sv = amb.resolver(nombre);
+                if (sv != null) dest = sv.getNombreC3D();
+            }
+            generador.emitirAsignacion(v.getLugar(), dest);
         }
         return ResultadoC3D.vacio();
     }
