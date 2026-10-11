@@ -6,33 +6,40 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Representa el stack frame (marco de pila) de UNA funcion para la traduccion a RISC-V.
- * Idea central del manejo de memoria del proyecto: NADA vive permanentemente en
- * registros. Cada parametro, variable local y temporal tiene un espacio reservado
- * en la pila, y se accede siempre relativo a fp (frame pointer), que es la base
- * fija e inamovible de la funcion activa. Los registros t0, t1, t2 solo se usan
- * como area de trabajo momentanea para evaluar una operacion y enseguida el
- * resultado se guarda de vuelta en la pila. Esto es lento pero simple y siempre
- * correcto, incluso con recursion: cada llamada tiene su propio frame, asi que un
- * parametro usado despues de un call (como "n" en "n * fact(n-1)") sigue intacto.
- *
- * Como el contador de temporales del C3D es GLOBAL por archivo (t0, t1, ... no se
- * reinician por funcion), esta clase recorre el cuerpo de la funcion y descubre que
- * nombres (temporales y variables) aparecen realmente en ella. A cada nombre nuevo
- * le asigna un slot consecutivo. Los parametros se colocan primero, en el orden en
- * que se declararon, porque quien llama los deja en ese orden.
- *
- *      fp + 0   -> fp del llamador (guardado en el prologo)
- *      fp - 4   -> ra, direccion de retorno (guardada en el prologo)
- *      fp - 8   -> slot 0  (primer parametro, o primer local/temporal si no hay params)
- *      fp - 12  -> slot 1
- * El acceso a un nombre es entonces: offsetEnBytes(nombre) = -(8 + slot*4).
- * El 8 inicial reserva el espacio de fp y ra guardados.
- */
-public class FrameFuncion {
-    // Bytes fijos al inicio del frame para guardar fp y ra del llamador.
-    private static final int BYTES_CABECERA = 8;
+// Representa el stack frame (marco de pila) de UNA funcion para la traduccion a RISC-V.
+//
+// Idea central del manejo de memoria del proyecto: NADA vive permanentemente en
+// registros. Cada parametro, variable local y temporal tiene un espacio reservado
+// en la pila, y se accede siempre relativo a fp (frame pointer), que es la base
+// fija e inamovible de la funcion activa. Los registros t0, t1, t2 solo se usan
+// como area de trabajo momentanea para evaluar una operacion y enseguida el
+// resultado se guarda de vuelta en la pila. Esto es lento pero simple y siempre
+// correcto, incluso con recursion: cada llamada tiene su propio frame, asi que un
+// parametro usado despues de un call (como "n" en "n * fact(n-1)") sigue intacto.
+//
+// Como el contador de temporales del C3D es GLOBAL por archivo (t0, t1, ... no se
+// reinician por funcion), esta clase recorre el cuerpo de la funcion y descubre que
+// nombres (temporales y variables) aparecen realmente en ella. A cada nombre nuevo
+// le asigna un slot consecutivo. Los parametros se colocan primero, en el orden en
+// que se declararon, porque quien llama los deja en ese orden.
+//
+// Layout del frame (crece hacia direcciones menores, como es habitual en la pila):
+//
+//     fp - 4   -> ra, direccion de retorno (guardada en el prologo)
+//     fp - 8   -> fp del llamador (guardado en el prologo)
+//     fp - 12  -> slot 0  (primer parametro, o primer local/temporal si no hay params)
+//     fp - 16  -> slot 1
+//     ...
+//
+// El acceso a un nombre es entonces: offsetEnBytes(nombre) = -(12 + slot*4).
+// Los 12 bytes iniciales reservan ra (fp-4) y el fp viejo (fp-8); los datos empiezan
+// debajo, en fp-12, para no pisarlos.
+public final class FrameFuncion {
+
+    // Bytes fijos al inicio del frame reservados para ra y fp del llamador, que el
+    // prologo guarda en fp-4 (ra) y fp-8 (fp viejo). Los slots de datos empiezan
+    // DEBAJO de esos dos, en fp-12, para no pisarlos. Por eso la cabecera es 12.
+    private static final int BYTES_CABECERA = 12;
     private static final int BYTES_POR_SLOT = 4;
 
     private final String nombreFuncion;
@@ -45,26 +52,21 @@ public class FrameFuncion {
         this.nombreFuncion = nombreFuncion;
     }
 
-    /**
-     * Construye el frame de una funcion a partir de su begin_func y su cuerpo.
-     * nombresParametros: los parametros en orden (incluye "this" en metodos de Z).
-     * cuerpo: las cuadruplas entre begin_func y end_func.
-     * @param nombreFuncion
-     * @param nombresParametros
-     * @param cuerpo
-     * @return
-     */
+    // Construye el frame de una funcion a partir de su begin_func y su cuerpo.
+    //   nombresParametros: los parametros en orden (incluye "this" en metodos de Z).
+    //   cuerpo: las cuadruplas entre begin_func y end_func.
     public static FrameFuncion construir(String nombreFuncion,
                                          List<String> nombresParametros,
                                          List<Cuadrupla> cuerpo) {
         FrameFuncion f = new FrameFuncion(nombreFuncion);
 
-        // Los parametros ocupan los primeros slots, en orden.
+        // 1) Los parametros ocupan los primeros slots, en orden.
         for (String p : nombresParametros) {
             f.reservar(p);
         }
 
-        // Recorrer el cuerpo y reservar un slot para cada nombre nuevo que aparezca como destino o como operando. Los literales y las etiquetas se ignoran.
+        // 2) Recorrer el cuerpo y reservar un slot para cada nombre nuevo que aparezca
+        //    como destino o como operando. Los literales y las etiquetas se ignoran.
         for (Cuadrupla c : cuerpo) {
             for (String nombre : nombresUsados(c)) {
                 if (esAlmacenable(nombre)) {
@@ -79,7 +81,8 @@ public class FrameFuncion {
         slots.putIfAbsent(nombre, slots.size());
     }
 
-    // Offset en bytes respecto a fp para acceder a este nombre. Siempre negativo porque el frame crece hacia abajo desde fp.
+    // Offset en bytes respecto a fp para acceder a este nombre. Siempre negativo
+    // porque el frame crece hacia abajo desde fp.
     public int offsetDe(String nombre) {
         Integer slot = slots.get(nombre);
         if (slot == null) {
@@ -93,7 +96,8 @@ public class FrameFuncion {
         return slots.containsKey(nombre);
     }
 
-    // Tamano total del frame en bytes, redondeado a multiplo de 16 porque el ABI de RISC-V exige que sp quede alineado a 16 bytes.
+    // Tamano total del frame en bytes, redondeado a multiplo de 16 porque el ABI de
+    // RISC-V exige que sp quede alineado a 16 bytes.
     public int tamanoBytes() {
         int bruto = BYTES_CABECERA + slots.size() * BYTES_POR_SLOT;
         return (bruto + 15) / 16 * 16;
@@ -107,17 +111,18 @@ public class FrameFuncion {
         return nombreFuncion;
     }
 
-    /**
-     * Un nombre va a la pila solo si es una variable o temporal. Se excluyen:
-     * - null
-     * - literales numericos (123, 3.14)
-     * - literales de cadena ("texto")
-     * - literales de caracter ('a')
-     * - booleanos (true/false) y null
-     * - "this" (se maneja aparte: es el primer parametro implicito, ya reservado)
-     * @param nombre
-     * @return
-     */
+    // ---------------------------------------------------------------
+    // Utilidades para saber que nombres usa una cuadrupla
+    // ---------------------------------------------------------------
+
+    // Un nombre va a la pila solo si es una variable o temporal. Se excluyen:
+    //   - null
+    //   - literales numericos (123, 3.14)
+    //   - literales de cadena ("texto")
+    //   - literales de caracter ('a')
+    //   - booleanos (true/false) y null
+    //   - "this" (se maneja aparte: es el primer parametro implicito, ya reservado)
+    // Las etiquetas (L0, L1) nunca llegan aqui porque no se consultan como operandos.
     private static boolean esAlmacenable(String nombre) {
         if (nombre == null || nombre.isEmpty()) return false;
         char c0 = nombre.charAt(0);
@@ -129,7 +134,8 @@ public class FrameFuncion {
         return true;
     }
 
-    // Devuelve los operandos y destinos "nombrables" de una cuadrupla, para decidir cuales necesitan slot. Se listan todos; esAlmacenable filtra los literales.
+    // Devuelve los operandos y destinos "nombrables" de una cuadrupla, para decidir
+    // cuales necesitan slot. Se listan todos; esAlmacenable filtra los literales.
     private static List<String> nombresUsados(Cuadrupla c) {
         return switch (c) {
             case CuadruplaBinaria q -> List.of(seguro(q.a()), seguro(q.b()), seguro(q.t()));

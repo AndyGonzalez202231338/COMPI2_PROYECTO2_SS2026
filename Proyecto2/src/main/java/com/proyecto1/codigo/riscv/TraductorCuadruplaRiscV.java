@@ -18,8 +18,8 @@ import com.proyecto1.semantico.ast.cuadruplas.*;
 // nada "entre" cuadruplas en ellos; cada cuadrupla los usa y descarta.
 //
 // Estado por subfase:
-//   subfase 1 (ESTA) -> asignacion, binaria, unaria (enteros)
-//   subfase 2        -> etiqueta, goto, if
+//   subfase 1        -> asignacion, binaria, unaria (enteros)
+//   subfase 2 (ESTA) -> etiqueta, goto, if
 //   subfase 3        -> param, call, return
 //   subfase 4        -> print, read
 //   subfase 5        -> new, newarray, campo, indice (heap)
@@ -42,6 +42,11 @@ public final class TraductorCuadruplaRiscV {
             case CuadruplaAsignacion q -> traducirAsignacion(q, sb);
             case CuadruplaBinaria q -> traducirBinaria(q, sb);
             case CuadruplaUnaria q -> traducirUnaria(q, sb);
+
+            case CuadruplaEtiqueta q -> traducirEtiqueta(q, sb);
+            case CuadruplaGoto q -> traducirGoto(q, sb);
+            case CuadruplaIfTrue q -> traducirIfTrue(q, sb);
+            case CuadruplaIfFalse q -> traducirIfFalse(q, sb);
 
             // Todavia no implementadas: se dejan solo como comentario (ya emitido arriba).
             default -> { /* pendiente de subfases siguientes */ }
@@ -126,6 +131,32 @@ public final class TraductorCuadruplaRiscV {
             default -> sb.append("    # operador unario no soportado: ").append(q.operador()).append("\n");
         }
         guardar("t2", q.t(), sb);
+    }
+    // Las etiquetas del C3D (L0, L1, ...) son unicas en todo el archivo (el contador
+    // es global), asi que se usan tal cual como etiquetas del .s sin riesgo de colision
+    // entre funciones.
+
+    // Etiqueta: solo se imprime como destino de salto.
+    private void traducirEtiqueta(CuadruplaEtiqueta q, StringBuilder sb) {
+        sb.append(q.etiqueta()).append(":\n");
+    }
+
+    // goto L: salto incondicional.
+    private void traducirGoto(CuadruplaGoto q, StringBuilder sb) {
+        sb.append("    j ").append(q.etiqueta()).append("\n");
+    }
+
+    // if_true cond goto L: carga la condicion y salta si NO es cero (bnez).
+    // La condicion es un 0/1 que dejo una comparacion previa (slt, seqz, ...).
+    private void traducirIfTrue(CuadruplaIfTrue q, StringBuilder sb) {
+        cargar(q.condicion(), "t0", sb);
+        sb.append("    bnez t0, ").append(q.etiqueta()).append("\n");
+    }
+
+    // if_false cond goto L: carga la condicion y salta si es cero (beqz).
+    private void traducirIfFalse(CuadruplaIfFalse q, StringBuilder sb) {
+        cargar(q.condicion(), "t0", sb);
+        sb.append("    beqz t0, ").append(q.etiqueta()).append("\n");
     }
 
     // ===============================================================
