@@ -263,3 +263,22 @@
 }
 .scroll-editor > .viewport { -fx-background-color: white; }
 .scroll-editor > .corner   { -fx-background-color: -color-panel-alt; }
+/* ===== Panel derecho de resultados (simbolos, cuadruplas, C3D) ===== */
+.panel-resultados {
+    -fx-background-color: -color-superficie, white;
+}
+
+/* Cuadruplas y C3D en monoespaciado para que operandos y columnas se alineen. */
+.tabla-cuadruplas {
+    -fx-font-family: "monospace";
+    -fx-font-size: 12px;
+}
+
+.area-c3d {
+    -fx-font-family: "monospace";
+    -fx-font-size: 13px;
+}
+
+.tabla-simbolos {
+    -fx-font-size: 12px;
+}

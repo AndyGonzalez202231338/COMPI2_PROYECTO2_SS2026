@@ -5,6 +5,9 @@ import com.proyecto1.servicio.ResultadoAnalisis;
 import com.proyecto1.servicio.ServicioAnalisis;
 import com.proyecto1.ui.modelo.ArchivoUI;
 import com.proyecto1.ui.modelo.FilaError;
+import com.proyecto1.ui.modelo.FilaSimbolo;
+import com.proyecto1.ui.modelo.FilaCuadrupla;
+import com.proyecto1.ui.modelo.RecolectorVista;
 import com.proyecto1.ui.servicio.GestorArchivos;
 import com.proyecto1.ui.util.Notificaciones;
 import javafx.application.Platform;
@@ -103,8 +106,31 @@ public class MainController implements ArbolController.EscuchaArbol, EditorContr
     @FXML private Button btnDeshacer;
     @FXML private Button btnRehacer;
     @FXML private Button btnBuscar;
-    @FXML private Button btnAnalizar;
-    @FXML private Button btnEjecutar;
+    @FXML private Button btnAnalizarC;
+    @FXML private Button btnAnalizarRiscV;
+
+    // ---- Panel derecho de resultados ----
+    @FXML private TabPane panelResultados;
+    @FXML private TableView<FilaSimbolo> tablaSimbolos;
+    @FXML private TableColumn<FilaSimbolo, String> colSimNombre;
+    @FXML private TableColumn<FilaSimbolo, String> colSimCategoria;
+    @FXML private TableColumn<FilaSimbolo, String> colSimTipo;
+    @FXML private TableColumn<FilaSimbolo, String> colSimAmbito;
+    @FXML private TableColumn<FilaSimbolo, String> colSimModificador;
+    @FXML private TableColumn<FilaSimbolo, Integer> colSimFila;
+    @FXML private TableColumn<FilaSimbolo, Integer> colSimColumna;
+    @FXML private TableColumn<FilaSimbolo, String> colSimExtra;
+    private final ObservableList<FilaSimbolo> filasSimbolos = FXCollections.observableArrayList();
+
+    @FXML private TableView<FilaCuadrupla> tablaCuadruplas;
+    @FXML private TableColumn<FilaCuadrupla, Integer> colCuadNum;
+    @FXML private TableColumn<FilaCuadrupla, String> colCuadOp;
+    @FXML private TableColumn<FilaCuadrupla, String> colCuadOp1;
+    @FXML private TableColumn<FilaCuadrupla, String> colCuadOp2;
+    @FXML private TableColumn<FilaCuadrupla, String> colCuadRes;
+    private final ObservableList<FilaCuadrupla> filasCuadruplas = FXCollections.observableArrayList();
+
+    @FXML private TextArea areaC3D;
 
     private ArbolController arbolController;
 
@@ -141,6 +167,8 @@ public class MainController implements ArbolController.EscuchaArbol, EditorContr
 
         configurarMenuWorkspace();
         configurarTablaErrores();
+        configurarTablaSimbolos();
+        configurarTablaCuadruplas();
 
         actualizarBarraEstado(null);
         escribirInfo("IDE iniciado. Cree un proyecto nuevo o abra una carpeta para comenzar.");
@@ -249,9 +277,51 @@ public class MainController implements ArbolController.EscuchaArbol, EditorContr
         };
     }
 
+    private void configurarTablaSimbolos() {
+        tablaSimbolos.setItems(filasSimbolos);
+        colSimNombre.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().getNombre()));
+        colSimCategoria.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().getCategoria()));
+        colSimTipo.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().getTipo()));
+        colSimAmbito.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().getAmbito()));
+        colSimModificador.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().getModificador()));
+        colSimFila.setCellValueFactory(c -> new ReadOnlyObjectWrapper<>(c.getValue().getFila()));
+        colSimColumna.setCellValueFactory(c -> new ReadOnlyObjectWrapper<>(c.getValue().getColumna()));
+        colSimExtra.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().getExtra()));
+    }
+
+    private void configurarTablaCuadruplas() {
+        tablaCuadruplas.setItems(filasCuadruplas);
+        colCuadNum.setCellValueFactory(c -> new ReadOnlyObjectWrapper<>(c.getValue().getIndice()));
+        colCuadOp.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().getOperador()));
+        colCuadOp1.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().getOperando1()));
+        colCuadOp2.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().getOperando2()));
+        colCuadRes.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().getResultado()));
+    }
+
+    // Llena las tres tablas del panel derecho a partir del resultado del analisis.
+    // Si no hubo C3D (por errores), las deja vacias.
+    private void poblarPanelResultados(ResultadoAnalisis resultado) {
+        filasSimbolos.setAll(RecolectorVista.recolectarSimbolos(resultado.getAmbitoGlobal()));
+
+        if (resultado.getGeneradorC3D() != null) {
+            var cuadruplas = resultado.getGeneradorC3D().getCuadruplas();
+            filasCuadruplas.setAll(RecolectorVista.recolectarCuadruplas(cuadruplas));
+
+            StringBuilder sb = new StringBuilder();
+            int i = 0;
+            for (var c : cuadruplas) {
+                sb.append(String.format("%3d: %s%n", i++, c.toStringLegible()));
+            }
+            areaC3D.setText(sb.toString());
+        } else {
+            filasCuadruplas.clear();
+            areaC3D.clear();
+        }
+    }
+
     // ==================== MENU EJECUTAR (placeholders) ====================
 
-    @FXML private void accionAnalizarArchivoActual() {
+    private void analizarYMostrar(String backend) {
         EditorController editor = obtenerEditorActivo();
         if (editor == null) {
             escribirAdvertencia("No hay ningun archivo abierto para analizar.");
@@ -263,7 +333,7 @@ public class MainController implements ArbolController.EscuchaArbol, EditorContr
         // Raiz del proyecto que contiene el archivo: ahi tambien se buscan los .y/.z que importa un .pig.
         File raizProyecto = arbolController.getProyectoQueContiene(archivo);
         editor.getEditor().limpiarMarcasDeError();
-        escribirInfo("Analizando " + archivo.getName() + "...");
+        escribirInfo("Analizando " + archivo.getName() + " (backend " + backend + ")...");
 
         Task<ResultadoAnalisis> tarea = new Task<>() {
             @Override
@@ -286,6 +356,7 @@ public class MainController implements ArbolController.EscuchaArbol, EditorContr
     /** Vuelca un {@link ResultadoAnalisis} en la consola, la tabla de errores y las marcas del editor. Corre en el hilo de JavaFX. */
     private void mostrarResultadoAnalisis(EditorController editor, ResultadoAnalisis resultado) {
         filasErrores.clear();
+        poblarPanelResultados(resultado);
         List<Integer> lineasConError = new ArrayList<>();
 
         if (resultado.isExito()) {
@@ -327,13 +398,12 @@ public class MainController implements ArbolController.EscuchaArbol, EditorContr
             lineasConError.add(error.getLinea());
         }
     }
-    @FXML private void accionCompilarProyecto() {
-        escribirAdvertencia("Compilar: pendiente de conexion con el backend.");
-        Notificaciones.mostrarFuncionPendiente(obtenerVentana());
+    @FXML private void accionAnalizarC() {
+        analizarYMostrar("C");
     }
-    @FXML private void accionEjecutarUltimoAnalisis() {
-        escribirAdvertencia("Ejecutar: pendiente de conexion con el backend.");
-        Notificaciones.mostrarFuncionPendiente(obtenerVentana());
+
+    @FXML private void accionAnalizarRiscV() {
+        analizarYMostrar("RISC-V");
     }
 
     // ==================== MENU AYUDA ====================

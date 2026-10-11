@@ -42,10 +42,9 @@
                     <CheckMenuItem fx:id="miMostrarArbol" text="Mostrar arbol de trabajo" selected="true" onAction="#accionAlternarArbol"/>
                     <CheckMenuItem fx:id="miMostrarPanelInferior" text="Mostrar consola y errores" selected="true" onAction="#accionAlternarPanelInferior"/>
                 </Menu>
-                <Menu text="Ejecutar">
-                    <MenuItem text="Analizar archivo actual" onAction="#accionAnalizarArchivoActual"/>
-                    <MenuItem text="Compilar todo el proyecto" onAction="#accionCompilarProyecto"/>
-                    <MenuItem text="Ejecutar ultimo analisis" onAction="#accionEjecutarUltimoAnalisis"/>
+                <Menu text="Analizar">
+                    <MenuItem text="Analizar y generar C" onAction="#accionAnalizarC"/>
+                    <MenuItem text="Analizar y generar RISC-V" onAction="#accionAnalizarRiscV"/>
                 </Menu>
                 <Menu text="Ayuda">
                     <MenuItem text="Acerca de" onAction="#accionAcercaDe"/>
@@ -65,8 +64,8 @@
                 <Button fx:id="btnRehacer" text="Rehacer" onAction="#accionRehacer"/>
                 <Button fx:id="btnBuscar" text="Buscar" onAction="#accionBuscarReemplazar"/>
                 <Separator orientation="VERTICAL"/>
-                <Button fx:id="btnAnalizar" text="Analizar" onAction="#accionAnalizarArchivoActual"/>
-                <Button fx:id="btnEjecutar" text="Ejecutar" onAction="#accionCompilarProyecto"/>
+                <Button fx:id="btnAnalizarC" text="Analizar C" onAction="#accionAnalizarC"/>
+                <Button fx:id="btnAnalizarRiscV" text="Analizar RISC-V" onAction="#accionAnalizarRiscV"/>
             </ToolBar>
         </VBox>
     </top>
@@ -84,6 +83,7 @@
         </TitledPane>
     </left>
     <center>
+        <SplitPane fx:id="splitHorizontal" dividerPositions="0.70" orientation="HORIZONTAL">
         <SplitPane fx:id="splitCentral" dividerPositions="0.66" orientation="VERTICAL">
             <StackPane>
                 <TabPane fx:id="panelPestanas" tabClosingPolicy="ALL_TABS"/>
@@ -118,6 +118,49 @@
                     </TableView>
                 </Tab>
             </TabPane>
+        </SplitPane>
+        <TabPane fx:id="panelResultados" tabClosingPolicy="UNAVAILABLE" styleClass="panel-resultados">
+            <Tab text="Tabla de simbolos">
+                <TableView fx:id="tablaSimbolos" styleClass="tabla-simbolos">
+                    <columnResizePolicy>
+                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                    </columnResizePolicy>
+                    <columns>
+                        <TableColumn fx:id="colSimNombre" text="NOMBRE" prefWidth="120.0"/>
+                        <TableColumn fx:id="colSimCategoria" text="CATEGORÍA" prefWidth="110.0"/>
+                        <TableColumn fx:id="colSimTipo" text="TIPO" prefWidth="90.0"/>
+                        <TableColumn fx:id="colSimAmbito" text="ÁMBITO" prefWidth="120.0"/>
+                        <TableColumn fx:id="colSimModificador" text="ACCESO" prefWidth="80.0"/>
+                        <TableColumn fx:id="colSimFila" text="FILA" prefWidth="50.0"/>
+                        <TableColumn fx:id="colSimColumna" text="COL" prefWidth="50.0"/>
+                        <TableColumn fx:id="colSimExtra" text="INFO" prefWidth="160.0"/>
+                    </columns>
+                    <placeholder>
+                        <Label text="(Analiza un archivo para ver sus simbolos)" styleClass="texto-suave"/>
+                    </placeholder>
+                </TableView>
+            </Tab>
+            <Tab text="Cuádruplas">
+                <TableView fx:id="tablaCuadruplas" styleClass="tabla-cuadruplas">
+                    <columnResizePolicy>
+                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                    </columnResizePolicy>
+                    <columns>
+                        <TableColumn fx:id="colCuadNum" text="#" prefWidth="45.0"/>
+                        <TableColumn fx:id="colCuadOp" text="OPERADOR" prefWidth="100.0"/>
+                        <TableColumn fx:id="colCuadOp1" text="OPERANDO 1" prefWidth="130.0"/>
+                        <TableColumn fx:id="colCuadOp2" text="OPERANDO 2" prefWidth="130.0"/>
+                        <TableColumn fx:id="colCuadRes" text="RESULTADO" prefWidth="130.0"/>
+                    </columns>
+                    <placeholder>
+                        <Label text="(Analiza un archivo para ver sus cuádruplas)" styleClass="texto-suave"/>
+                    </placeholder>
+                </TableView>
+            </Tab>
+            <Tab text="C3D">
+                <TextArea fx:id="areaC3D" editable="false" wrapText="false" styleClass="area-c3d"/>
+            </Tab>
+        </TabPane>
         </SplitPane>
     </center>
     <bottom>
