@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.proyecto1.codigo.c.OrquestadorC3DaC;
+import com.proyecto1.codigo.riscv.OrquestadorRiscV;
 import com.proyecto1.semantico.ast.cuadruplas.Cuadrupla;
 
 import java.nio.file.Files;
@@ -141,6 +142,7 @@ public class ServicioAnalisis {
 
                     imprimirCuadruplas(generadorC3D, "Y?", archivo);
                     generarArchivoC(generadorC3D, archivo, "_", null, ambitoGlobal, Map.of());
+                    generarArchivoRiscV(generadorC3D, archivo, null);
 
                 } catch (Exception exC3D) {
                     String detalle = exC3D.getMessage() != null ? exC3D.getMessage() : exC3D.getClass().getSimpleName();
@@ -227,6 +229,7 @@ public class ServicioAnalisis {
 
                     imprimirCuadruplas(generadorC3D, "Zetariano", archivo);
                     generarArchivoC(generadorC3D, archivo, "_", null, ambitoInterno, firmasHermanas);
+                    generarArchivoRiscV(generadorC3D, archivo, null);
 
                 } catch (Exception exC3D) {
                     String detalle = exC3D.getMessage() != null ? exC3D.getMessage() : exC3D.getClass().getSimpleName();
@@ -316,6 +319,7 @@ public class ServicioAnalisis {
                     // declarar las variables globales y como fuente de tipos para InferenciaTiposC.
                     generarArchivoC(generadorC3D, archivo, "_", "main",
                             globalPig, firmasExternas);
+                    generarArchivoRiscV(generadorC3D, archivo, "main");
 
                 } catch (Exception exC3D) {
                     String detalle = exC3D.getMessage() != null ? exC3D.getMessage() : exC3D.getClass().getSimpleName();
@@ -439,6 +443,32 @@ public class ServicioAnalisis {
         } catch (Exception exC) {
             String detalle = exC.getMessage() != null ? exC.getMessage() : exC.getClass().getSimpleName();
             System.out.println("[C] Error generando C: " + detalle);
+        }
+    }
+
+    // Genera el archivo .s (ensamblador RISC-V) al lado del fuente. Mismo patron que
+    // generarArchivoC: toma las cuadruplas y firmas y delega en OrquestadorRiscV.
+    //   nombreFuncionEntrada: "main" en PigLatin (punto de arranque del programa),
+    //                         null en Y?/Z (no tienen main propio ejecutable).
+    private static void generarArchivoRiscV(GeneradorC3D generadorC3D, File archivo,
+                                            String nombreFuncionEntrada) {
+        try {
+            OrquestadorRiscV orq = new OrquestadorRiscV(
+                    generadorC3D.getCuadruplas(),
+                    generadorC3D.getFirmas(),
+                    nombreFuncionEntrada
+            );
+            String codigoAsm = orq.generarArchivoCompleto();
+
+            String ruta = archivo.getAbsolutePath();
+            int punto = ruta.lastIndexOf('.');
+            String salida = (punto >= 0 ? ruta.substring(0, punto) : ruta) + ".s";
+
+            Files.writeString(Path.of(salida), codigoAsm);
+            System.out.println("[RISC-V] Archivo .s generado: " + salida);
+        } catch (Exception ex) {
+            String detalle = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+            System.out.println("[RISC-V] Error generando .s: " + detalle);
         }
     }
 
