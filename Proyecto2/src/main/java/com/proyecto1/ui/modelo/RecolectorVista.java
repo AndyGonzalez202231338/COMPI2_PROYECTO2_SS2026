@@ -31,16 +31,38 @@ public final class RecolectorVista {
         List<FilaSimbolo> filas = new ArrayList<>();
         if (global == null) return filas;
 
-        for (Simbolo s : global.simbolosLocales()) {
-            switch (s.getCategoria()) {
-                case CLASE -> agregarClase(filas, s);
-                case ESTRUCTURA -> agregarEstructura(filas, s);
-                case FUNCION -> agregarFuncion(filas, s, "global");
-                case VARIABLE -> filas.add(filaVariableGlobal(s));
-                default -> filas.add(filaSimple(s, "global"));
+        // En PigLatin las variables del .pig viven en "global", pero las funciones y
+        // clases importadas (de los .y/.z) viven en su ambito PADRE. Se recorren ambos
+        // para que la tabla muestre todo: primero lo importado (el padre), luego lo
+        // propio del archivo. Para Y? y Z no hay padre con simbolos, asi que solo se
+        // recorre su propio ambito. El Set evita listar dos veces un mismo simbolo si
+        // apareciera en ambos niveles.
+        java.util.Set<String> vistos = new java.util.HashSet<>();
+
+        Ambito padre = global.getPadre();
+        if (padre != null) {
+            for (Simbolo s : padre.simbolosLocales()) {
+                if (vistos.add(claveSimbolo(s))) agregarSimbolo(filas, s);
             }
         }
+        for (Simbolo s : global.simbolosLocales()) {
+            if (vistos.add(claveSimbolo(s))) agregarSimbolo(filas, s);
+        }
         return filas;
+    }
+
+    private static String claveSimbolo(Simbolo s) {
+        return s.getCategoria() + ":" + s.getNombre();
+    }
+
+    private static void agregarSimbolo(List<FilaSimbolo> filas, Simbolo s) {
+        switch (s.getCategoria()) {
+            case CLASE -> agregarClase(filas, s);
+            case ESTRUCTURA -> agregarEstructura(filas, s);
+            case FUNCION -> agregarFuncion(filas, s, "global");
+            case VARIABLE -> filas.add(filaVariableGlobal(s));
+            default -> filas.add(filaSimple(s, "global"));
+        }
     }
 
     private static void agregarClase(List<FilaSimbolo> filas, Simbolo clase) {
