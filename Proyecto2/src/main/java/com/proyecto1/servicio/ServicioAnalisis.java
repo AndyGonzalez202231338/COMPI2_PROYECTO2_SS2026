@@ -259,6 +259,7 @@ public class ServicioAnalisis {
 
         List<ErrorSemantico> erroresSemanticos = List.of();
         List<ErrorSemantico> advertencias = List.of();
+        AmbitoGlobal ambitoExportado = null;
         GeneradorC3D generadorC3D = null;
         if (!listener.tieneErrores()) {
             com.proyecto1.semantico.ast.piglatin.Programa programa = new ASTBuilderPigLatin().construir(arbol);
@@ -268,6 +269,7 @@ public class ServicioAnalisis {
                     new AnalizadorSemanticoPigLatin().analizar(programa, imports.getAmbitoGlobal());
             ManejadorErrores errores = resultadoPig.errores();
             AmbitoGlobal globalPig = resultadoPig.globalPig();
+            ambitoExportado = globalPig;
 
             List<ErrorSemantico> todos = new ArrayList<>(imports.getErrores());
             todos.addAll(errores.obtenerErrores());
@@ -324,7 +326,7 @@ public class ServicioAnalisis {
         }
 
         ResultadoAnalisis base = ResultadoAnalisis.conErrores("PigLatin", listener.getErroresLexicos(),
-                listener.getErroresSintacticos(), erroresSemanticos, advertencias, contarLineas(texto));
+                listener.getErroresSintacticos(), erroresSemanticos, advertencias, contarLineas(texto), ambitoExportado);
 
         return (generadorC3D != null) ? ResultadoAnalisis.conC3D(base, generadorC3D) : base;
     }
