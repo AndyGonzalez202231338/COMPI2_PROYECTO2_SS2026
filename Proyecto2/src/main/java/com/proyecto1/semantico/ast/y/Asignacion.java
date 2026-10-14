@@ -88,12 +88,16 @@ public final class Asignacion extends NodoY implements InstruccionY {
     private LValue resolverLValue(ExpresionY objetivo, GeneradorC3D generador) {
         if (objetivo instanceof Identificador id) {
             Tipo t = TipoPrimitivo.DESCONOCIDO;
+            // Nombre que se escribe en el C3D: el nombre unico del simbolo (x_1, x_2...)
+            // para no pisar una variable del mismo nombre declarada en otro bloque.
+            String destino = id.getNombre();
             Ambito amb = generador.getAmbito();
             if (amb != null) {
                 Simbolo s = amb.resolver(id.getNombre());
                 if (s != null && s.getTipo() != null) t = s.getTipo();
+                if (s != null) destino = s.getNombreC3D();
             }
-            return new LValue(id.getNombre(), null, null, t);
+            return new LValue(destino, null, null, t);
         }
         if (objetivo instanceof AccesoCampo ac) {
             ResultadoC3D base = ac.getObjeto().generarC3D(generador);
