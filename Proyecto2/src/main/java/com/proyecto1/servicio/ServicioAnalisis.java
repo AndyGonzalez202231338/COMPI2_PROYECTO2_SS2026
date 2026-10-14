@@ -35,6 +35,7 @@ import java.util.Map;
 
 import com.proyecto1.codigo.c.OrquestadorC3DaC;
 import com.proyecto1.codigo.riscv.OrquestadorRiscV;
+import com.proyecto1.codigo.riscv.UnidadRiscV;
 import com.proyecto1.semantico.ast.cuadruplas.Cuadrupla;
 
 import java.nio.file.Files;
@@ -61,6 +62,17 @@ public class ServicioAnalisis {
     private static final ThreadLocal<StringBuilder> acumuladorC3D =
             ThreadLocal.withInitial(StringBuilder::new);
 
+    // C3D de los .y/.z que se analizan mientras se procesa un .pig (sus imports). Venus
+    // ejecuta un solo archivo, asi que el .s del .pig tiene que llevar dentro las
+    // funciones de esos archivos. Mismo patron que acumuladorC3D: se vacia al empezar
+    // el .pig y cada .y/.z importado agrega su unidad.
+    private static final ThreadLocal<java.util.LinkedHashMap<String, UnidadRiscV>> unidadesRiscV =
+            ThreadLocal.withInitial(java.util.LinkedHashMap::new);
+
+    // true mientras se analiza un .pig. Evita juntar unidades cuando se analiza un
+    // .y o .z suelto (sin un .pig de por medio).
+    private static final ThreadLocal<Boolean> analizandoPig = ThreadLocal.withInitial(() -> false);
+
     public ServicioAnalisis() {
         this(null);
     }
@@ -74,6 +86,8 @@ public class ServicioAnalisis {
         boolean esRaiz = "pig".equals(extension);
         if (esRaiz) {
             acumuladorC3D.get().setLength(0);   // arranca el consolidado del proyecto
+            unidadesRiscV.get().clear();
+            analizandoPig.set(true);
         }
         try {
             ResultadoAnalisis resultado = switch (extension) {
@@ -84,12 +98,14 @@ public class ServicioAnalisis {
             };
             if (esRaiz) {
                 escribirConsolidadoC3D(archivo);
+                analizandoPig.set(false);
             }
             return resultado;
         } catch (Exception ex) {
             String detalle = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
             if (esRaiz) {
                 escribirConsolidadoC3D(archivo);
+                analizandoPig.set(false);
             }
             return ResultadoAnalisis.errorInterno(etiquetaLenguaje(extension), detalle);
         }
@@ -143,6 +159,7 @@ public class ServicioAnalisis {
                     imprimirCuadruplas(generadorC3D, "Y?", archivo);
                     generarArchivoC(generadorC3D, archivo, "_", null, ambitoGlobal, Map.of());
                     generarArchivoRiscV(generadorC3D, archivo, null);
+                    registrarUnidadRiscV(archivo, generadorC3D);
 
                 } catch (Exception exC3D) {
                     String detalle = exC3D.getMessage() != null ? exC3D.getMessage() : exC3D.getClass().getSimpleName();
@@ -230,6 +247,7 @@ public class ServicioAnalisis {
                     imprimirCuadruplas(generadorC3D, "Zetariano", archivo);
                     generarArchivoC(generadorC3D, archivo, "_", null, ambitoInterno, firmasHermanas);
                     generarArchivoRiscV(generadorC3D, archivo, null);
+                    registrarUnidadRiscV(archivo, generadorC3D);
 
                 } catch (Exception exC3D) {
                     String detalle = exC3D.getMessage() != null ? exC3D.getMessage() : exC3D.getClass().getSimpleName();
@@ -319,7 +337,7 @@ public class ServicioAnalisis {
                     // declarar las variables globales y como fuente de tipos para InferenciaTiposC.
                     generarArchivoC(generadorC3D, archivo, "_", "main",
                             globalPig, firmasExternas);
-                    generarArchivoRiscV(generadorC3D, archivo, "main");
+                    generarArchivoRiscVPrograma(generadorC3D, archivo);
 
                 } catch (Exception exC3D) {
                     String detalle = exC3D.getMessage() != null ? exC3D.getMessage() : exC3D.getClass().getSimpleName();
@@ -466,6 +484,37 @@ public class ServicioAnalisis {
 
             Files.writeString(Path.of(salida), codigoAsm);
             System.out.println("[RISC-V] Archivo .s generado: " + salida);
+        } catch (Exception ex) {
+            String detalle = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+            System.out.println("[RISC-V] Error generando .s: " + detalle);
+        }
+    }
+
+    // Si se esta analizando un .pig, guarda el C3D de este .y/.z para meterlo luego en
+    // el .s del .pig. Se indexa por nombre de archivo para no repetirlo si se importa
+    // dos veces.
+    private static void registrarUnidadRiscV(File archivo, GeneradorC3D generadorC3D) {
+        if (!analizandoPig.get()) return;
+        unidadesRiscV.get().put(archivo.getAbsolutePath(), UnidadRiscV.de(archivo.getName(), generadorC3D));
+    }
+
+    // .s ejecutable de un .pig: el main mas todas las funciones de los .y/.z importados,
+    // en un solo archivo (Venus no junta varios archivos). La unidad del .pig va
+    // primera para que main quede al principio del codigo.
+    private static void generarArchivoRiscVPrograma(GeneradorC3D generadorC3D, File archivo) {
+        try {
+            List<UnidadRiscV> unidades = new ArrayList<>();
+            unidades.add(UnidadRiscV.de(archivo.getName(), generadorC3D));
+            unidades.addAll(unidadesRiscV.get().values());
+
+            String codigoAsm = new OrquestadorRiscV(unidades, "main").generarArchivoCompleto();
+
+            String ruta = archivo.getAbsolutePath();
+            int punto = ruta.lastIndexOf('.');
+            String salida = (punto >= 0 ? ruta.substring(0, punto) : ruta) + ".s";
+            Files.writeString(Path.of(salida), codigoAsm);
+            System.out.println("[RISC-V] Archivo .s generado (" + unidades.size()
+                    + " archivo(s) juntos, listo para Venus): " + salida);
         } catch (Exception ex) {
             String detalle = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
             System.out.println("[RISC-V] Error generando .s: " + detalle);

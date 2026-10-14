@@ -41,7 +41,7 @@ public final class Imprimir extends NodoPigLatin implements InstruccionPigLatin 
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         for (int i = 0; i < argumentos.size(); i++) {
             ResultadoC3D v = argumentos.get(i).generarC3D(generador);
-            generador.emitirPrint(v.getLugar(), i == argumentos.size() - 1);
+            generador.emitirPrint(v.getLugar(), i == argumentos.size() - 1, v.getTipo().nombre());
         }
         return ResultadoC3D.vacio();
     }

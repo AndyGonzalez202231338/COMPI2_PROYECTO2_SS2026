@@ -170,12 +170,18 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
         // Caso 1: identificador simple (variable local o parámetro).
         if (objetivo instanceof Identificador id) {
             Tipo tipo = TipoPrimitivo.DESCONOCIDO;
+            // Nombre que se escribe en el C3D: el nombre unico del simbolo (x_1, x_2...)
+            // para no pisar una variable del mismo nombre declarada en otro bloque.
+            String destino = id.getNombre();
             Ambito amb = generador.getAmbito();
             if (amb != null) {
                 Simbolo s = amb.resolver(id.getNombre());
-                if (s != null) tipo = s.getTipo();
+                if (s != null) {
+                    tipo = s.getTipo();
+                    destino = s.getNombreC3D();
+                }
             }
-            return new LValue(id.getNombre(), null, null, tipo);
+            return new LValue(destino, null, null, tipo);
         }
 
         // Caso 2: obj.campo

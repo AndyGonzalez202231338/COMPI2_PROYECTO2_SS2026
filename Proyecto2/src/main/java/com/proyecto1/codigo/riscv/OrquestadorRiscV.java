@@ -9,7 +9,7 @@ import java.util.Map;
 
 // Ensambla un archivo RISC-V (.s) completo a partir de las cuadruplas y firmas de un
 // programa. Es el equivalente de OrquestadorC3DaC pero generando ensamblador en vez
-// de C. Se disena para el emulador RARS/Venus (RV32I).
+// de C. Se disena para el emulador Venus (RV32I).
 //
 // Estructura del .s que produce:
 //
@@ -35,50 +35,81 @@ import java.util.Map;
 // comentarios (ver TraductorCuadruplaRiscV), pendiente de las subfases siguientes.
 public final class OrquestadorRiscV {
 
-    private final List<Cuadrupla> cuadruplas;
-    private final Map<String, GeneradorC3D.Firma> firmas;
+    // Archivos cuyo codigo va en este .s. Para un .y o .z suelto es uno solo; para un
+    // .pig es el propio .pig mas todos los .y/.z que importa, porque Venus ejecuta un
+    // unico archivo y el main tiene que encontrar ahi las funciones que llama.
+    private final List<UnidadRiscV> unidades;
 
     // Nombre de la funcion de entrada en el C3D:
     //   PigLatin -> "main"
-    //   Y / Z   -> null (no tienen un main propio; el .s igual se genera para
+    //   Y? / Z   -> null (no tienen un main propio; el .s igual se genera para
     //               inspeccionar sus funciones, pero sin punto de entrada ejecutable)
     private final String nombreFuncionEntrada;
 
+    // Literales de cadena de TODAS las unidades; terminan en la seccion .data.
+    private final TablaCadenas cadenas = new TablaCadenas();
+
+    // Un solo archivo (compatibilidad con la forma anterior).
     public OrquestadorRiscV(List<Cuadrupla> cuadruplas,
                             Map<String, GeneradorC3D.Firma> firmas,
                             String nombreFuncionEntrada) {
-        this.cuadruplas = (cuadruplas != null) ? cuadruplas : List.of();
-        this.firmas = (firmas != null) ? firmas : Map.of();
+        this(List.of(new UnidadRiscV("",
+                        (cuadruplas != null) ? cuadruplas : List.of(),
+                        (firmas != null) ? firmas : Map.of())),
+                nombreFuncionEntrada);
+    }
+
+    // Varios archivos en un mismo .s.
+    public OrquestadorRiscV(List<UnidadRiscV> unidades, String nombreFuncionEntrada) {
+        this.unidades = (unidades != null) ? unidades : List.of();
         this.nombreFuncionEntrada = nombreFuncionEntrada;
     }
 
     public String generarArchivoCompleto() {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("# Codigo RISC-V (RV32I) generado automaticamente\n");
-        sb.append("# Pensado para el emulador RARS/Venus\n\n");
-
-        // Seccion de datos. Por ahora vacia; en la subfase de cadenas se llenara con
-        // las literales de texto del programa.
-        sb.append(".data\n");
-        sb.append("# (sin datos estaticos todavia)\n\n");
-
-        // Seccion de codigo.
-        sb.append(".text\n");
-        sb.append(".globl main\n\n");
-
-        List<FuncionCompilada> funciones = dividirPorFuncion();
-
-        // Cada funcion con su prologo, cuerpo y epilogo. La funcion de entrada
-        // (normalmente "main" en PigLatin) es ademas el punto de arranque del
-        // programa: RARS/Venus ejecutan desde la etiqueta "main", asi que no hace
-        // falta un wrapper aparte; basta con que esa funcion exista con ese nombre
-        // y que su epilogo termine con exit en vez de ret.
-        for (FuncionCompilada fc : funciones) {
-            boolean esEntrada = fc.begin().nombre().equals(nombreFuncionEntrada);
-            emitirFuncion(fc, sb, esEntrada);
+        // 1) Juntar las funciones de todas las unidades. Cada funcion recuerda de que
+        //    unidad viene (para el prefijo de sus etiquetas y para buscar su firma).
+        List<FuncionCompilada> funciones = new ArrayList<>();
+        for (UnidadRiscV u : unidades) {
+            funciones.addAll(dividirPorFuncion(u));
         }
 
+        // 2) Venus empieza a ejecutar en la PRIMERA instruccion del codigo, sin mirar
+        //    etiquetas (verificado en su documentacion). Por eso la funcion de entrada
+        //    se mueve al principio; si no, el programa arrancaria en otra funcion.
+        List<FuncionCompilada> ordenadas = new ArrayList<>();
+        for (FuncionCompilada fc : funciones) {
+            if (fc.begin().nombre().equals(nombreFuncionEntrada)) ordenadas.add(fc);
+        }
+        for (FuncionCompilada fc : funciones) {
+            if (!fc.begin().nombre().equals(nombreFuncionEntrada)) ordenadas.add(fc);
+        }
+
+        // 3) Traducir el codigo. Se hace ANTES de escribir .data porque al traducir es
+        //    cuando se descubren los literales de cadena.
+        StringBuilder texto = new StringBuilder();
+        for (FuncionCompilada fc : ordenadas) {
+            boolean esEntrada = fc.begin().nombre().equals(nombreFuncionEntrada);
+            emitirFuncion(fc, texto, esEntrada);
+        }
+
+        // 4) Armar el archivo: cabecera, .data con las cadenas, .text con el codigo.
+        StringBuilder sb = new StringBuilder();
+        sb.append("# Codigo RISC-V (RV32I) generado automaticamente\n");
+        sb.append("# Pensado para el emulador Venus\n");
+        if (unidades.size() > 1) {
+            sb.append("# Incluye:");
+            for (UnidadRiscV u : unidades) sb.append(" ").append(u.nombre());
+            sb.append("\n");
+        }
+        sb.append("\n.data\n");
+        if (cadenas.estaVacia()) {
+            sb.append("# (sin cadenas)\n");
+        } else {
+            cadenas.emitirSeccionData(sb);
+        }
+        sb.append("\n.text\n");
+        sb.append(".globl main\n\n");
+        sb.append(texto);
         return sb.toString();
     }
 
@@ -89,22 +120,41 @@ public final class OrquestadorRiscV {
 
         // Nombres de los parametros, en orden, para colocarlos en los primeros slots.
         // Se toman de la firma si existe; si no, se generan como p0, p1, ... segun nArgs.
-        List<String> params = nombresParametros(nombre, fc.begin().nArgs());
+        List<String> params = nombresParametros(fc.unidad(), nombre, fc.begin().nArgs());
 
         FrameFuncion frame = FrameFuncion.construir(nombre, params, fc.cuerpo());
-        TraductorCuadruplaRiscV traductor = new TraductorCuadruplaRiscV(frame);
+        TraductorCuadruplaRiscV traductor =
+                new TraductorCuadruplaRiscV(frame, nombre, cadenas, fc.unidad().nombre());
 
         int tam = frame.tamanoBytes();
+        int nParams = params.size();
 
         // --- Etiqueta de la funcion ---
         sb.append(nombre).append(":\n");
 
-        // --- Prologo ---
-        // Reservar el frame y guardar fp y ra del llamador. El orden importa:
-        //   1) bajar sp el tamano del frame
-        //   2) guardar ra en el tope (fp quedara justo encima)
-        //   3) guardar el fp viejo
-        //   4) fijar el nuevo fp a la base del frame (parte alta del bloque reservado)
+        // ============================================================
+        // PROLOGO
+        // ============================================================
+        // Crea el stack frame de esta llamada. Recordar como estan los dos punteros:
+        //   sp (stack pointer): apunta al TOPE de la pila. La pila crece hacia
+        //       direcciones MENORES, asi que "reservar" espacio es RESTAR a sp.
+        //   fp (frame pointer): apunta a la BASE del frame actual y NO se mueve
+        //       mientras la funcion corre. Es el punto de referencia estable: cada
+        //       variable, parametro y temporal se accede como offset(fp). Por eso,
+        //       aunque sp baje y suba al hacer llamadas o apilar argumentos, los datos
+        //       siempre se encuentran en el mismo offset(fp).
+        //
+        // Pasos del prologo, en orden:
+        //   1) addi sp, sp, -tam   -> bajar sp para reservar todo el frame de una vez.
+        //   2) sw ra, tam-4(sp)    -> guardar la direccion de retorno. Hay que guardarla
+        //                             porque si esta funcion llama a otra (jal), ese jal
+        //                             sobrescribe ra; sin guardarla, se perderia el
+        //                             camino de vuelta al llamador.
+        //   3) sw fp, tam-8(sp)    -> guardar el fp del llamador, para restaurarlo al salir
+        //                             (si no, el llamador perderia su propia base de frame).
+        //   4) addi fp, sp, tam    -> fijar fp a la BASE del frame (la parte alta del bloque
+        //                             reservado). Desde aqui, ra queda en fp-4, el fp viejo
+        //                             en fp-8, y los datos en fp-12 hacia abajo.
         sb.append("    # --- prologo de ").append(nombre)
                 .append(" (frame = ").append(tam).append(" bytes) ---\n");
         sb.append("    addi sp, sp, -").append(tam).append("\n");
@@ -112,23 +162,49 @@ public final class OrquestadorRiscV {
         sb.append("    sw fp, ").append(tam - 8).append("(sp)\n");
         sb.append("    addi fp, sp, ").append(tam).append("\n");
 
-        // --- Cuerpo ---
+        // --- Copia de argumentos a los slots de parametro ---
+        // El llamador dejo los argumentos JUSTO ENCIMA de este frame (ver
+        // ConvencionLlamada). Como fp apunta a la base, el argumento i del llamador
+        // esta en fp + i*4, y hay que copiarlo al slot del parametro i, que
+        // FrameFuncion coloco en fp - 12 - i*4. Se usa t0 como puente.
+        if (nParams > 0) {
+            sb.append("    # copiar ").append(nParams).append(" argumento(s) a los parametros\n");
+            for (int i = 0; i < nParams; i++) {
+                int offArgLlamador = i * 4;                 // fp + i*4
+                int offParam = frame.offsetDe(params.get(i)); // fp - 12 - i*4 (negativo)
+                sb.append("    lw t0, ").append(offArgLlamador).append("(fp)\n");
+                sb.append("    sw t0, ").append(offParam).append("(fp)\n");
+            }
+        }
+
+        // ============================================================
+        // CUERPO
+        // ============================================================
         sb.append("    # --- cuerpo ---\n");
         for (Cuadrupla c : fc.cuerpo()) {
             traductor.traducir(c, sb);
         }
 
-        // --- Epilogo ---
-        // Restaurar fp y ra, liberar el frame. Se etiqueta (nombre_fin) para que un
-        // "return" en medio de la funcion pueda saltar aqui (subfase 3).
+        // ============================================================
+        // EPILOGO
+        // ============================================================
+        // Deshace lo del prologo, en orden inverso, y retorna. Esta etiquetado
+        // (nombre_fin) porque cada "return" del cuerpo salta aqui en vez de duplicar
+        // el codigo de salida. El valor de retorno ya viaja en a0 (lo dejo el return).
+        //   1) lw ra  <- recuperar la direccion de retorno guardada.
+        //   2) lw fp  <- recuperar la base de frame del llamador.
+        //   3) addi sp, sp, tam -> subir sp para LIBERAR el frame (lo contrario del paso 1
+        //                          del prologo). La pila queda como estaba antes de entrar.
+        //   4) ret    <- saltar a la direccion que esta en ra (vuelve al llamador).
         sb.append("    # --- epilogo de ").append(nombre).append(" ---\n");
         sb.append(nombre).append("_fin:\n");
         sb.append("    lw ra, ").append(tam - 4).append("(sp)\n");
         sb.append("    lw fp, ").append(tam - 8).append("(sp)\n");
         sb.append("    addi sp, sp, ").append(tam).append("\n");
         if (esEntrada) {
-            // Funcion de entrada: en vez de retornar a nadie, termina el programa.
-            sb.append("    li a7, 10\n");   // ecall 10 = exit en RARS
+            // Funcion de entrada (main): en vez de retornar a nadie, termina el programa.
+            // Venus: codigo del servicio en a0. El 10 termina el programa.
+            sb.append("    li a0, 10\n");
             sb.append("    ecall\n\n");
         } else {
             sb.append("    ret\n\n");
@@ -138,8 +214,8 @@ public final class OrquestadorRiscV {
     // Nombres de los parametros de una funcion. La firma (si existe) los trae en orden
     // e incluye "this" como primero en metodos/constructores de Z. Sin firma, se
     // generan nombres sinteticos p0..pN-1, que al menos reservan los slots correctos.
-    private List<String> nombresParametros(String nombreFuncion, int nArgs) {
-        GeneradorC3D.Firma firma = firmas.get(nombreFuncion);
+    private List<String> nombresParametros(UnidadRiscV unidad, String nombreFuncion, int nArgs) {
+        GeneradorC3D.Firma firma = unidad.firmas().get(nombreFuncion);
         if (firma != null && firma.parametros() != null) {
             List<String> out = new ArrayList<>();
             for (GeneradorC3D.ParametroFirma p : firma.parametros()) {
@@ -153,9 +229,10 @@ public final class OrquestadorRiscV {
     }
 
     // begin_func + las cuadruplas hasta el end_func correspondiente.
-    private record FuncionCompilada(CuadruplaBeginFunc begin, List<Cuadrupla> cuerpo) {}
+    private record FuncionCompilada(UnidadRiscV unidad, CuadruplaBeginFunc begin, List<Cuadrupla> cuerpo) {}
 
-    private List<FuncionCompilada> dividirPorFuncion() {
+    private List<FuncionCompilada> dividirPorFuncion(UnidadRiscV unidad) {
+        List<Cuadrupla> cuadruplas = unidad.cuadruplas();
         List<FuncionCompilada> resultado = new ArrayList<>();
         int i = 0;
         while (i < cuadruplas.size()) {
@@ -165,7 +242,7 @@ public final class OrquestadorRiscV {
                 while (j < cuadruplas.size() && !(cuadruplas.get(j) instanceof CuadruplaEndFunc)) {
                     j++;
                 }
-                resultado.add(new FuncionCompilada(bf, new ArrayList<>(cuadruplas.subList(i + 1, j))));
+                resultado.add(new FuncionCompilada(unidad, bf, new ArrayList<>(cuadruplas.subList(i + 1, j))));
                 i = j + 1;
             } else {
                 i++;
