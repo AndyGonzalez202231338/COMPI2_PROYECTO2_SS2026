@@ -35,6 +35,11 @@ import java.util.Map;
 // comentarios (ver TraductorCuadruplaRiscV), pendiente de las subfases siguientes.
 public final class OrquestadorRiscV {
 
+    // Bytes reservados para el heap. Alcanza para miles de objetos pequenos; si un
+    // programa pidiera mas, simplemente se saldria de la zona reservada (no hay
+    // comprobacion de limite, igual que no hay liberacion de memoria).
+    private static final int BYTES_HEAP = 4096;
+
     // Archivos cuyo codigo va en este .s. Para un .y o .z suelto es uno solo; para un
     // .pig es el propio .pig mas todos los .y/.z que importa, porque Venus ejecuta un
     // unico archivo y el main tiene que encontrar ahi las funciones que llama.
@@ -60,6 +65,12 @@ public final class OrquestadorRiscV {
     }
 
     public String generarArchivoCompleto() {
+        // 0) Registrar el layout del heap de todas las unidades: donde vive cada campo
+        //    dentro de un objeto y cuanto ocupa cada clase o estructura.
+        for (UnidadRiscV u : unidades) {
+            layoutHeap.registrar(u.ambitoGlobal());
+        }
+
         // 1) Juntar las funciones de todas las unidades. Cada funcion recuerda de que
         //    unidad viene (para el prefijo de sus etiquetas y para buscar su firma).
         List<FuncionCompilada> funciones = new ArrayList<>();
@@ -101,6 +112,34 @@ public final class OrquestadorRiscV {
         } else {
             cadenas.emitirSeccionData(sb);
         }
+
+        // ---- Zona del heap ----
+        // Aqui viven los objetos, las estructuras y los arreglos: todo lo que se crea
+        // con "new" y cuyo tamano no se conoce al escribir el programa.
+        //
+        // Se reserva un bloque fijo de memoria y se reparte con un "bump allocator":
+        // un puntero que solo avanza. Cada "new" toma la direccion actual del puntero,
+        // lo adelanta tantos bytes como ocupe el objeto, y devuelve la direccion que
+        // tenia antes. Nunca se libera memoria (no hay "free" ni recolector), que es
+        // suficiente para programas de este tamano y es lo mas simple que funciona.
+        //
+        //   heap_ptr: una palabra con la direccion de la proxima zona libre.
+        //   heap_mem: el bloque de memoria que se va repartiendo.
+        sb.append("\n# --- heap: memoria para new (objetos, estructuras y arreglos) ---\n");
+        sb.append("heap_ptr: .word 0\n");
+        sb.append("heap_mem:\n");
+        // El bloque se reserva con .word en vez de .space porque Venus solo acepta
+        // .data, .text, .byte, .asciiz, .word y .globl (verificado en su codigo
+        // fuente): con .space el ensamblado falla. Se escriben varias palabras por
+        // linea para que el .s no quede con miles de lineas.
+        int palabras = BYTES_HEAP / 4;
+        int porLinea = 32;
+        for (int i = 0; i < palabras; i += porLinea) {
+            int n = Math.min(porLinea, palabras - i);
+            sb.append("    .word");
+            for (int k = 0; k < n; k++) sb.append(k == 0 ? " 0" : ", 0");
+            sb.append("\n");
+        }
         sb.append("\n.text\n");
         sb.append(".globl main\n\n");
         sb.append(texto);
@@ -125,6 +164,15 @@ public final class OrquestadorRiscV {
 
         // --- Etiqueta de la funcion ---
         sb.append(nombre).append(":\n");
+
+        // En la funcion de entrada (main) se prepara el heap antes que nada: heap_ptr
+        // arranca apuntando al inicio del bloque libre (heap_mem).
+        if (esEntrada) {
+            sb.append("    # inicio del heap: heap_ptr = direccion de heap_mem\n");
+            sb.append("    la t0, heap_mem\n");
+            sb.append("    la t1, heap_ptr\n");
+            sb.append("    sw t0, 0(t1)\n");
+        }
 
         // ============================================================
         // PROLOGO
