@@ -21,8 +21,8 @@ import com.proyecto1.semantico.ast.cuadruplas.*;
 //   subfase 1        -> asignacion, binaria, unaria (enteros)
 //   subfase 2        -> etiqueta, goto, if
 //   subfase 3        -> param, call, return
-//   subfase 4 (ESTA) -> print, read, literales de cadena y caracter
-//   subfase 5        -> new, newarray, campo, indice (heap)
+//   subfase 4        -> print, read, literales de cadena y caracter
+//   subfase 5 (ESTA) -> new, newarray, campo, indice (heap)
 //   subfase 6        -> dispatch por _class_id
 //   subfase 7        -> flotantes y cadenas
 // Lo no implementado todavia se emite como comentario, para no romper el .s.
@@ -46,11 +46,16 @@ public final class TraductorCuadruplaRiscV {
     // en un .s que junta varios archivos dos de ellos pueden tener su propio L0.
     private final String prefijoEtiquetas;
 
+    // Donde vive cada campo dentro de un objeto del heap (ver LayoutHeap).
+    private final LayoutHeap layoutHeap;
+
     public TraductorCuadruplaRiscV(FrameFuncion frame, String nombreFuncion,
-                                   TablaCadenas cadenas, String prefijoEtiquetas) {
+                                   TablaCadenas cadenas, String prefijoEtiquetas,
+                                   LayoutHeap layoutHeap) {
         this.frame = frame;
         this.nombreFuncion = nombreFuncion;
         this.cadenas = cadenas;
+        this.layoutHeap = layoutHeap;
         this.prefijoEtiquetas = (prefijoEtiquetas == null || prefijoEtiquetas.isEmpty())
                 ? "" : prefijoEtiquetas + "_";
     }
@@ -75,6 +80,13 @@ public final class TraductorCuadruplaRiscV {
 
             case CuadruplaPrint q -> traducirPrint(q, sb);
             case CuadruplaRead q -> traducirRead(q, sb);
+
+            case CuadruplaNew q -> traducirNew(q, sb);
+            case CuadruplaNewArray q -> traducirNewArray(q, sb);
+            case CuadruplaCampoCarga q -> traducirCampoCarga(q, sb);
+            case CuadruplaCampoGuarda q -> traducirCampoGuarda(q, sb);
+            case CuadruplaIndiceCarga q -> traducirIndiceCarga(q, sb);
+            case CuadruplaIndiceGuarda q -> traducirIndiceGuarda(q, sb);
 
             // Todavia no implementadas: se dejan solo como comentario (ya emitido arriba).
             default -> { /* pendiente de subfases siguientes */ }
@@ -327,6 +339,167 @@ public final class TraductorCuadruplaRiscV {
         sb.append("    # Venus no permite leer del teclado: se guarda 0\n");
         sb.append("    li t0, 0\n");
         guardar("t0", q.destino(), sb);
+    }
+
+    // ===============================================================
+    // Heap: objetos, estructuras y arreglos (subfase 5)
+    // ===============================================================
+    //
+    // QUE ES EL HEAP Y POR QUE HACE FALTA
+    // La pila sirve para los datos de una funcion: nacen al entrar y mueren al salir.
+    // Pero un objeto creado con "new" tiene que seguir existiendo despues de que la
+    // funcion que lo creo termine (por ejemplo, si lo devuelve o lo guarda en una
+    // variable global). Para eso esta el heap: una zona de memoria aparte que NO se
+    // libera al salir de una funcion.
+    //
+    // COMO SE REPARTE: BUMP ALLOCATOR
+    // La forma mas simple de repartir el heap es con un puntero que solo avanza:
+    //     heap_ptr apunta a la primera direccion libre.
+    //     Pedir N bytes = devolver heap_ptr y luego sumarle N.
+    // No hay forma de liberar memoria (no existe "free" ni recolector de basura). Es
+    // suficiente para este proyecto y es el codigo mas corto y facil de seguir.
+    //
+    // POR REFERENCIA
+    // Lo que se guarda en la pila NO es el objeto, es su DIRECCION en el heap (una
+    // palabra de 4 bytes). Por eso pasar un objeto a una funcion no lo copia: las dos
+    // partes trabajan sobre el mismo objeto.
+
+    // Codigo que reserva bytes en el heap y deja la direccion obtenida en t2.
+    // El tamano a reservar tiene que estar en t0 antes de llamar a este metodo.
+    //
+    //     t1 = &heap_ptr        direccion de la variable que guarda el puntero
+    //     t2 = heap_ptr         direccion libre actual: esta es la que se devuelve
+    //     t3 = t2 + t0          siguiente direccion libre
+    //     heap_ptr = t3         el puntero avanza
+    private void emitirReservaHeap(StringBuilder sb) {
+        sb.append("    la t1, heap_ptr\n");
+        sb.append("    lw t2, 0(t1)\n");      // t2 = inicio del bloque que se entrega
+        sb.append("    add t3, t2, t0\n");    // t3 = donde quedara libre despues
+        sb.append("    sw t3, 0(t1)\n");      // avanzar el puntero
+    }
+
+    // new Clase -> destino
+    // Reserva en el heap el espacio que ocupa un objeto de esa clase y guarda su
+    // direccion en el destino. El tamano lo da LayoutHeap, que lo calculo sumando
+    // _class_id mas todos los atributos (incluidos los heredados).
+    // El contenido queda sin inicializar: los campos los llena el constructor, que el
+    // C3D llama justo despues de este "new".
+    private void traducirNew(CuadruplaNew q, StringBuilder sb) {
+        int tam = layoutHeap.tamanoDe(q.clase());
+        if (tam <= 0) {
+            // No se conoce la clase (no deberia pasar si la semantica fue bien). Se
+            // reserva una palabra para que el programa no se rompa, y se avisa.
+            sb.append("    # AVISO: tamano desconocido de '").append(q.clase()).append("'\n");
+            tam = 4;
+        }
+        sb.append("    li t0, ").append(tam).append("\n");
+        emitirReservaHeap(sb);
+        guardar("t2", q.destino(), sb);
+    }
+
+    // new tipo[n] -> destino
+    // Reserva un arreglo en el heap. Se guarda asi:
+    //
+    //     base + 0   -> cantidad de elementos (la longitud)
+    //     base + 4   -> elemento 0
+    //     base + 8   -> elemento 1
+    //     ...
+    //
+    // La longitud se guarda al inicio para poder comprobar el indice mas adelante si
+    // hiciera falta; los elementos empiezan en base + 4. Por eso el acceso a arr[i] usa
+    // el desplazamiento (i + 1) * 4.
+    //
+    // Solo se soporta un nivel (arreglos de arreglos quedan pendientes). El tamano
+    // puede ser una expresion, no solo un numero: por eso se carga como cualquier otro
+    // operando en vez de calcularse aqui.
+    private void traducirNewArray(CuadruplaNewArray q, StringBuilder sb) {
+        if (q.tamanos().isEmpty()) {
+            sb.append("    # AVISO: arreglo sin tamano\n");
+            return;
+        }
+        if (q.tamanos().size() > 1) {
+            sb.append("    # AVISO: arreglos de varias dimensiones pendientes; se usa la primera\n");
+        }
+
+        // t4 = cantidad de elementos (se guarda aparte porque t0..t3 los usa la reserva)
+        cargar(q.tamanos().get(0), "t4", sb);
+
+        // Bytes a reservar = (longitud + 1) * 4   (el +1 es la palabra de la longitud)
+        sb.append("    addi t0, t4, 1\n");
+        sb.append("    slli t0, t0, 2\n");        // multiplicar por 4 (desplazar 2 bits)
+        emitirReservaHeap(sb);                      // t2 = direccion base del arreglo
+
+        // Guardar la longitud en la primera palabra.
+        sb.append("    sw t4, 0(t2)\n");
+        guardar("t2", q.destino(), sb);
+    }
+
+    // destino = objeto.campo
+    //     t1 = direccion del objeto (viene de la pila)
+    //     lw t2, offset(t1)
+    private void traducirCampoCarga(CuadruplaCampoCarga q, StringBuilder sb) {
+        cargar(q.objeto(), "t1", sb);
+        int off = offsetDeCampo(q.campo(), sb);
+        sb.append("    lw t2, ").append(off).append("(t1)\n");
+        guardar("t2", q.destino(), sb);
+    }
+
+    // objeto.campo = valor
+    //     t1 = direccion del objeto, t0 = valor
+    //     sw t0, offset(t1)
+    private void traducirCampoGuarda(CuadruplaCampoGuarda q, StringBuilder sb) {
+        cargar(q.objeto(), "t1", sb);
+        cargar(q.valor(), "t0", sb);
+        int off = offsetDeCampo(q.campo(), sb);
+        sb.append("    sw t0, ").append(off).append("(t1)\n");
+    }
+
+    // Convierte el nombre de un campo en su posicion dentro del objeto.
+    // Las cuadruplas no dicen de que clase es el objeto (solo traen el nombre del
+    // campo), asi que se busca el campo entre todas las clases conocidas. Si dos clases
+    // tuvieran un campo con el mismo nombre en posiciones distintas, se avisa en el .s.
+    private int offsetDeCampo(String campo, StringBuilder sb) {
+        if (LayoutHeap.CAMPO_CLASS_ID.equals(campo)) return 0;
+        int off = layoutHeap.offsetDeCampoUnico(campo);
+        if (off == -2) {
+            sb.append("    # AVISO: el campo '").append(campo)
+              .append("' existe en varias clases con posiciones distintas\n");
+            return 0;
+        }
+        if (off < 0) {
+            sb.append("    # AVISO: no se encontro la posicion del campo '").append(campo).append("'\n");
+            return 0;
+        }
+        return off;
+    }
+
+    // destino = arreglo[indice]
+    //     t1 = direccion base del arreglo
+    //     t2 = indice
+    //     direccion del elemento = base + (indice + 1) * 4
+    private void traducirIndiceCarga(CuadruplaIndiceCarga q, StringBuilder sb) {
+        cargar(q.arreglo(), "t1", sb);
+        cargar(q.indice(), "t2", sb);
+        emitirDireccionElemento(sb);                // deja la direccion en t1
+        sb.append("    lw t2, 0(t1)\n");
+        guardar("t2", q.destino(), sb);
+    }
+
+    // arreglo[indice] = valor
+    private void traducirIndiceGuarda(CuadruplaIndiceGuarda q, StringBuilder sb) {
+        cargar(q.arreglo(), "t1", sb);
+        cargar(q.indice(), "t2", sb);
+        cargar(q.valor(), "t4", sb);                // t4 porque t0..t3 se usan abajo
+        emitirDireccionElemento(sb);                // deja la direccion en t1
+        sb.append("    sw t4, 0(t1)\n");
+    }
+
+    // Calcula la direccion del elemento de un arreglo y la deja en t1.
+    // Espera la base en t1 y el indice en t2. El +1 salta la palabra de la longitud.
+    private void emitirDireccionElemento(StringBuilder sb) {
+        sb.append("    addi t2, t2, 1\n");         // saltar la longitud
+        sb.append("    slli t2, t2, 2\n");         // elementos de 4 bytes
+        sb.append("    add t1, t1, t2\n");         // base + desplazamiento
     }
 
     // ===============================================================
