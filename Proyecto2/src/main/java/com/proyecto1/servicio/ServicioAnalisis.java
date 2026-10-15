@@ -195,7 +195,7 @@ public class ServicioAnalisis {
                     if (analizandoPig.get() && salidaDelPig.get() == TipoSalida.C) {
                         generarArchivoC(generadorC3D, archivo, "_", null, ambitoGlobal, Map.of());
                     }
-                    registrarUnidadRiscV(archivo, generadorC3D);
+                    registrarUnidadRiscV(archivo, generadorC3D, ambitoGlobal);
 
                 } catch (Exception exC3D) {
                     String detalle = exC3D.getMessage() != null ? exC3D.getMessage() : exC3D.getClass().getSimpleName();
@@ -285,7 +285,10 @@ public class ServicioAnalisis {
                                 recolectarFirmasImportadas(ambitoInterno, clase.getNombre());
                         generarArchivoC(generadorC3D, archivo, "_", null, ambitoInterno, firmasHermanas);
                     }
-                    registrarUnidadRiscV(archivo, generadorC3D);
+                    // ambitoInterno trae la clase con el layout de sus campos ya
+                    // calculado (offsets y tamano del objeto), que el backend RISC-V
+                    // necesita para traducir los accesos a campos.
+                    registrarUnidadRiscV(archivo, generadorC3D, ambitoInterno);
 
                 } catch (Exception exC3D) {
                     String detalle = exC3D.getMessage() != null ? exC3D.getMessage() : exC3D.getClass().getSimpleName();
@@ -381,7 +384,7 @@ public class ServicioAnalisis {
                         // variables globales y como fuente de tipos para InferenciaTiposC.
                         generarArchivoC(generadorC3D, archivo, "_", "main", globalPig, firmasExternas);
                     } else if (salida == TipoSalida.RISC_V) {
-                        generarArchivoRiscVPrograma(generadorC3D, archivo);
+                        generarArchivoRiscVPrograma(generadorC3D, archivo, globalPig);
                     }
 
                 } catch (Exception exC3D) {
@@ -509,47 +512,24 @@ public class ServicioAnalisis {
         }
     }
 
-    // Genera el archivo .s (ensamblador RISC-V) al lado del fuente. Mismo patron que
-    // generarArchivoC: toma las cuadruplas y firmas y delega en OrquestadorRiscV.
-    //   nombreFuncionEntrada: "main" en PigLatin (punto de arranque del programa),
-    //                         null en Y?/Z (no tienen main propio ejecutable).
-    private static void generarArchivoRiscV(GeneradorC3D generadorC3D, File archivo,
-                                            String nombreFuncionEntrada) {
-        try {
-            OrquestadorRiscV orq = new OrquestadorRiscV(
-                    generadorC3D.getCuadruplas(),
-                    generadorC3D.getFirmas(),
-                    nombreFuncionEntrada
-            );
-            String codigoAsm = orq.generarArchivoCompleto();
-
-            String ruta = archivo.getAbsolutePath();
-            int punto = ruta.lastIndexOf('.');
-            String salida = (punto >= 0 ? ruta.substring(0, punto) : ruta) + ".s";
-
-            Files.writeString(Path.of(salida), codigoAsm);
-            System.out.println("[RISC-V] Archivo .s generado: " + salida);
-        } catch (Exception ex) {
-            String detalle = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
-            System.out.println("[RISC-V] Error generando .s: " + detalle);
-        }
-    }
-
     // Si se esta analizando un .pig, guarda el C3D de este .y/.z para meterlo luego en
     // el .s del .pig. Se indexa por nombre de archivo para no repetirlo si se importa
     // dos veces.
-    private static void registrarUnidadRiscV(File archivo, GeneradorC3D generadorC3D) {
+    private static void registrarUnidadRiscV(File archivo, GeneradorC3D generadorC3D,
+                                             AmbitoGlobal ambitoGlobal) {
         if (!analizandoPig.get()) return;
-        unidadesRiscV.get().put(archivo.getAbsolutePath(), UnidadRiscV.de(archivo.getName(), generadorC3D));
+        unidadesRiscV.get().put(archivo.getAbsolutePath(),
+                UnidadRiscV.de(archivo.getName(), generadorC3D, ambitoGlobal));
     }
 
     // .s ejecutable de un .pig: el main mas todas las funciones de los .y/.z importados,
     // en un solo archivo (Venus no junta varios archivos). La unidad del .pig va
     // primera para que main quede al principio del codigo.
-    private static void generarArchivoRiscVPrograma(GeneradorC3D generadorC3D, File archivo) {
+    private static void generarArchivoRiscVPrograma(GeneradorC3D generadorC3D, File archivo,
+                                                    AmbitoGlobal ambitoGlobal) {
         try {
             List<UnidadRiscV> unidades = new ArrayList<>();
-            unidades.add(UnidadRiscV.de(archivo.getName(), generadorC3D));
+            unidades.add(UnidadRiscV.de(archivo.getName(), generadorC3D, ambitoGlobal));
             unidades.addAll(unidadesRiscV.get().values());
 
             String codigoAsm = new OrquestadorRiscV(unidades, "main").generarArchivoCompleto();

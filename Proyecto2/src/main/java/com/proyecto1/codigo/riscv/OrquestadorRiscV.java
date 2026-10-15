@@ -49,15 +49,9 @@ public final class OrquestadorRiscV {
     // Literales de cadena de TODAS las unidades; terminan en la seccion .data.
     private final TablaCadenas cadenas = new TablaCadenas();
 
-    // Un solo archivo (compatibilidad con la forma anterior).
-    public OrquestadorRiscV(List<Cuadrupla> cuadruplas,
-                            Map<String, GeneradorC3D.Firma> firmas,
-                            String nombreFuncionEntrada) {
-        this(List.of(new UnidadRiscV("",
-                        (cuadruplas != null) ? cuadruplas : List.of(),
-                        (firmas != null) ? firmas : Map.of())),
-                nombreFuncionEntrada);
-    }
+    // Posicion de cada campo dentro de los objetos del heap. Se arma a partir de la
+    // tabla de simbolos de cada unidad (ver LayoutHeap).
+    private final LayoutHeap layoutHeap = new LayoutHeap();
 
     // Varios archivos en un mismo .s.
     public OrquestadorRiscV(List<UnidadRiscV> unidades, String nombreFuncionEntrada) {
@@ -124,7 +118,7 @@ public final class OrquestadorRiscV {
 
         FrameFuncion frame = FrameFuncion.construir(nombre, params, fc.cuerpo());
         TraductorCuadruplaRiscV traductor =
-                new TraductorCuadruplaRiscV(frame, nombre, cadenas, fc.unidad().nombre());
+                new TraductorCuadruplaRiscV(frame, nombre, cadenas, fc.unidad().nombre(), layoutHeap);
 
         int tam = frame.tamanoBytes();
         int nParams = params.size();

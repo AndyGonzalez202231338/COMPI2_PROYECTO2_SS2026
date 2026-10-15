@@ -21,8 +21,8 @@ import com.proyecto1.semantico.ast.cuadruplas.*;
 //   subfase 1        -> asignacion, binaria, unaria (enteros)
 //   subfase 2        -> etiqueta, goto, if
 //   subfase 3        -> param, call, return
-//   subfase 4 (ESTA) -> print, read, literales de cadena y caracter
-//   subfase 5        -> new, newarray, campo, indice (heap)
+//   subfase 4        -> print, read, literales de cadena y caracter
+//   subfase 5 (ESTA) -> new, newarray, campo, indice (heap)
 //   subfase 6        -> dispatch por _class_id
 //   subfase 7        -> flotantes y cadenas
 // Lo no implementado todavia se emite como comentario, para no romper el .s.
@@ -47,7 +47,8 @@ public final class TraductorCuadruplaRiscV {
     private final String prefijoEtiquetas;
 
     public TraductorCuadruplaRiscV(FrameFuncion frame, String nombreFuncion,
-                                   TablaCadenas cadenas, String prefijoEtiquetas) {
+                                   TablaCadenas cadenas, String prefijoEtiquetas,
+                                   LayoutHeap layoutHeap) {
         this.frame = frame;
         this.nombreFuncion = nombreFuncion;
         this.cadenas = cadenas;
@@ -327,6 +328,96 @@ public final class TraductorCuadruplaRiscV {
         sb.append("    # Venus no permite leer del teclado: se guarda 0\n");
         sb.append("    li t0, 0\n");
         guardar("t0", q.destino(), sb);
+    }
+
+    // ===============================================================
+    // Heap: objetos, estructuras y arreglos (subfase 5)
+    // ===============================================================
+    //
+    // QUE ES EL HEAP Y POR QUE HACE FALTA
+    // La pila sirve para los datos de una funcion: nacen al entrar y mueren al salir.
+    // Pero un objeto creado con "new" tiene que seguir existiendo despues de que la
+    // funcion que lo creo termine (por ejemplo, si lo devuelve o lo guarda en una
+    // variable global). Para eso esta el heap: una zona de memoria aparte que NO se
+    // libera al salir de una funcion.
+    //
+    // COMO SE REPARTE: BUMP ALLOCATOR
+    // La forma mas simple de repartir el heap es con un puntero que solo avanza:
+    //     heap_ptr apunta a la primera direccion libre.
+    //     Pedir N bytes = devolver heap_ptr y luego sumarle N.
+    // No hay forma de liberar memoria (no existe "free" ni recolector de basura). Es
+    // suficiente para este proyecto y es el codigo mas corto y facil de seguir.
+    //
+    // POR REFERENCIA
+    // Lo que se guarda en la pila NO es el objeto, es su DIRECCION en el heap (una
+    // palabra de 4 bytes). Por eso pasar un objeto a una funcion no lo copia: las dos
+    // partes trabajan sobre el mismo objeto.
+
+    // Codigo que reserva bytes en el heap y deja la direccion obtenida en t2.
+    // El tamano a reservar tiene que estar en t0 antes de llamar a este metodo.
+    //
+    //     t1 = &heap_ptr        direccion de la variable que guarda el puntero
+    //     t2 = heap_ptr         direccion libre actual: esta es la que se devuelve
+    //     t3 = t2 + t0          siguiente direccion libre
+    //     heap_ptr = t3         el puntero avanza
+    private void emitirReservaHeap(StringBuilder sb) {
+        sb.append("    la t1, heap_ptr\n");
+        sb.append("    lw t2, 0(t1)\n");      // t2 = inicio del bloque que se entrega
+        sb.append("    add t3, t2, t0\n");    // t3 = donde quedara libre despues
+        sb.append("    sw t3, 0(t1)\n");      // avanzar el puntero
+    }
+
+
+
+
+
+    // destino = objeto.campo
+    //     t1 = direccion del objeto (viene de la pila)
+    //     lw t2, offset(t1)
+    private void traducirCampoCarga(CuadruplaCampoCarga q, StringBuilder sb) {
+        cargar(q.objeto(), "t1", sb);
+        int off = offsetDeCampo(q.campo(), sb);
+        sb.append("    lw t2, ").append(off).append("(t1)\n");
+        guardar("t2", q.destino(), sb);
+    }
+
+    // objeto.campo = valor
+    //     t1 = direccion del objeto, t0 = valor
+    //     sw t0, offset(t1)
+    private void traducirCampoGuarda(CuadruplaCampoGuarda q, StringBuilder sb) {
+        cargar(q.objeto(), "t1", sb);
+        cargar(q.valor(), "t0", sb);
+        int off = offsetDeCampo(q.campo(), sb);
+        sb.append("    sw t0, ").append(off).append("(t1)\n");
+    }
+
+    // Convierte el nombre de un campo en su posicion dentro del objeto.
+    // Las cuadruplas no dicen de que clase es el objeto (solo traen el nombre del
+    // campo), asi que se busca el campo entre todas las clases conocidas. Si dos clases
+    // tuvieran un campo con el mismo nombre en posiciones distintas, se avisa en el .s.
+    private int offsetDeCampo(String campo, StringBuilder sb) {
+        if (LayoutHeap.CAMPO_CLASS_ID.equals(campo)) return 0;
+        int off = layoutHeap.offsetDeCampoUnico(campo);
+        if (off == -2) {
+            sb.append("    # AVISO: el campo '").append(campo)
+              .append("' existe en varias clases con posiciones distintas\n");
+            return 0;
+        }
+        if (off < 0) {
+            sb.append("    # AVISO: no se encontro la posicion del campo '").append(campo).append("'\n");
+            return 0;
+        }
+        return off;
+    }
+
+
+
+    // Calcula la direccion del elemento de un arreglo y la deja en t1.
+    // Espera la base en t1 y el indice en t2. El +1 salta la palabra de la longitud.
+    private void emitirDireccionElemento(StringBuilder sb) {
+        sb.append("    addi t2, t2, 1\n");         // saltar la longitud
+        sb.append("    slli t2, t2, 2\n");         // elementos de 4 bytes
+        sb.append("    add t1, t1, t2\n");         // base + desplazamiento
     }
 
     // ===============================================================
