@@ -50,6 +50,13 @@ import java.nio.file.Path;
  */
 public class ServicioAnalisis {
 
+    // Que archivo de salida se pide al analizar. Solo se usa (y solo tiene sentido)
+    // al analizar un .pig: es el unico archivo con "main", el punto de entrada de un
+    // programa ejecutable. Un .y o un .z sueltos son piezas sin entrada propia (serian
+    // un .c o un .s sin funcion main), asi que nunca escriben archivo por si solos,
+    // se analicen directamente o como import de un .pig.
+    public enum TipoSalida { C, RISC_V }
+
     private final File raizProyecto;
 
     /**
@@ -73,6 +80,12 @@ public class ServicioAnalisis {
     // .y o .z suelto (sin un .pig de por medio).
     private static final ThreadLocal<Boolean> analizandoPig = ThreadLocal.withInitial(() -> false);
 
+    // Backend pedido por el .pig que se esta analizando ahora mismo (null si no hay
+    // ninguno en curso). Lo consultan analizarY/analizarZ para decidir si, mientras son
+    // importados por ese .pig, deben escribir su propio .c (hace falta para que gcc
+    // pueda enlazar varios .c; en RISC-V no hace falta, todo queda en un solo .s).
+    private static final ThreadLocal<TipoSalida> salidaDelPig = ThreadLocal.withInitial(() -> null);
+
     public ServicioAnalisis() {
         this(null);
     }
@@ -81,24 +94,37 @@ public class ServicioAnalisis {
         this.raizProyecto = raizProyecto;
     }
 
+    // Analiza sin pedir ningun archivo de salida: solo errores, tabla de simbolos y
+    // C3D (para los paneles de la interfaz). Es lo que usa CargadorImports para revisar
+    // cada .y/.z que un .pig importa: esos archivos no deben escribir su propio .c/.s,
+    // su C3D solo se usa para construir el archivo del .pig que los importa.
     public ResultadoAnalisis analizar(File archivo, String texto) {
+        return analizar(archivo, texto, null);
+    }
+
+    // salida == null: no escribe ningun archivo (ver el overload de arriba).
+    // salida != null: al analizar un .pig, escribe el archivo pedido (.c o .s). En un
+    // .y o .z, salida se ignora: nunca escriben archivo, tengan o no main importador.
+    public ResultadoAnalisis analizar(File archivo, String texto, TipoSalida salida) {
         String extension = extensionDe(archivo);
         boolean esRaiz = "pig".equals(extension);
         if (esRaiz) {
             acumuladorC3D.get().setLength(0);   // arranca el consolidado del proyecto
             unidadesRiscV.get().clear();
             analizandoPig.set(true);
+            salidaDelPig.set(salida);
         }
         try {
             ResultadoAnalisis resultado = switch (extension) {
                 case "y" -> analizarY(texto, archivo);
                 case "z" -> analizarZ(texto, archivo);
-                case "pig" -> analizarPigLatin(texto, archivo);
+                case "pig" -> analizarPigLatin(texto, archivo, salida);
                 default -> ResultadoAnalisis.extensionNoSoportada(archivo.getName());
             };
             if (esRaiz) {
                 escribirConsolidadoC3D(archivo);
                 analizandoPig.set(false);
+                salidaDelPig.set(null);
             }
             return resultado;
         } catch (Exception ex) {
@@ -106,6 +132,7 @@ public class ServicioAnalisis {
             if (esRaiz) {
                 escribirConsolidadoC3D(archivo);
                 analizandoPig.set(false);
+                salidaDelPig.set(null);
             }
             return ResultadoAnalisis.errorInterno(etiquetaLenguaje(extension), detalle);
         }
@@ -157,8 +184,17 @@ public class ServicioAnalisis {
                             + generadorC3D.getFirmas().size() + " función(es).");
 
                     imprimirCuadruplas(generadorC3D, "Y?", archivo);
-                    generarArchivoC(generadorC3D, archivo, "_", null, ambitoGlobal, Map.of());
-                    generarArchivoRiscV(generadorC3D, archivo, null);
+                    // Si un .pig que pidio C esta importando este archivo AHORA MISMO,
+                    // se escribe su .c: gcc necesita el .c de cada modulo importado para
+                    // enlazarlos junto con el .c del .pig (ahi solo quedan declaraciones
+                    // extern de estas funciones, no sus cuerpos).
+                    // Si el .y se abrio directamente (no es import de ningun .pig), o el
+                    // .pig pidio RISC-V, no se escribe nada: un .y suelto no tiene "main",
+                    // y en RISC-V todo el programa va en el unico .s del .pig (ver
+                    // registrarUnidadRiscV, mas abajo).
+                    if (analizandoPig.get() && salidaDelPig.get() == TipoSalida.C) {
+                        generarArchivoC(generadorC3D, archivo, "_", null, ambitoGlobal, Map.of());
+                    }
                     registrarUnidadRiscV(archivo, generadorC3D);
 
                 } catch (Exception exC3D) {
@@ -237,16 +273,18 @@ public class ServicioAnalisis {
                             + clase.getNombre() + "'): " + generadorC3D.getCuadruplas().size()
                             + " cuádruplas, " + generadorC3D.getFirmas().size() + " método(s)/constructor(es).");
 
-                    // Firmas de las clases HERMANAS (todas las clases de ambitoInterno
-                    // menos la actual). Se emiten como prototipos para que este .c
-                    // pueda referenciar métodos de la otra clase (Nodo <-> Pila) sin
-                    // que el compilador de C falle con "implicit declaration".
-                    Map<String, GeneradorC3D.Firma> firmasHermanas =
-                            recolectarFirmasImportadas(ambitoInterno, clase.getNombre());
-
                     imprimirCuadruplas(generadorC3D, "Zetariano", archivo);
-                    generarArchivoC(generadorC3D, archivo, "_", null, ambitoInterno, firmasHermanas);
-                    generarArchivoRiscV(generadorC3D, archivo, null);
+                    // Mismo criterio que en analizarY: el .c de esta clase solo hace
+                    // falta si un .pig que pidio C la esta importando ahora mismo (gcc
+                    // necesita el cuerpo de sus metodos para enlazar). Las firmas de las
+                    // clases HERMANAS (las demas clases del mismo ambitoInterno) se pasan
+                    // como prototipos, para que esta clase pueda llamar a metodos de otra
+                    // (Nodo <-> Pila) sin que gcc falle con "implicit declaration".
+                    if (analizandoPig.get() && salidaDelPig.get() == TipoSalida.C) {
+                        Map<String, GeneradorC3D.Firma> firmasHermanas =
+                                recolectarFirmasImportadas(ambitoInterno, clase.getNombre());
+                        generarArchivoC(generadorC3D, archivo, "_", null, ambitoInterno, firmasHermanas);
+                    }
                     registrarUnidadRiscV(archivo, generadorC3D);
 
                 } catch (Exception exC3D) {
@@ -263,7 +301,7 @@ public class ServicioAnalisis {
         return (generadorC3D != null) ? ResultadoAnalisis.conC3D(base, generadorC3D) : base;
     }
 
-    private ResultadoAnalisis analizarPigLatin(String texto, File archivo) {
+    private ResultadoAnalisis analizarPigLatin(String texto, File archivo, TipoSalida salida) {
         ListenerErroresANTLR listener = new ListenerErroresANTLR();
 
         LenguajeLexer lexer = new LenguajeLexer(CharStreams.fromString(texto));
@@ -332,12 +370,19 @@ public class ServicioAnalisis {
                             recolectarFirmasImportadas(imports.getAmbitoGlobal(), null);
 
                     imprimirCuadruplas(generadorC3D, "PigLatin", archivo);
-                    // Ahora pasamos globalPig (con las globales del .pig + padre de imports)
-                    // como ambitoGlobalUsado. Ese es el ámbito que OrquestadorC3DaC usa para
-                    // declarar las variables globales y como fuente de tipos para InferenciaTiposC.
-                    generarArchivoC(generadorC3D, archivo, "_", "main",
-                            globalPig, firmasExternas);
-                    generarArchivoRiscVPrograma(generadorC3D, archivo);
+                    // El .pig es el unico archivo con "main": aqui SI se escribe el
+                    // ejecutable, y se escribe solo el formato que se pidio (el boton
+                    // "Analizar C" pide C, "Analizar RISC-V" pide RISC_V). Antes se
+                    // generaban los dos siempre; ahora cada analisis produce un solo
+                    // archivo de salida, el que corresponde al backend elegido.
+                    if (salida == TipoSalida.C) {
+                        // globalPig (las globales del .pig + el ambito padre de los
+                        // imports) es lo que OrquestadorC3DaC usa para declarar las
+                        // variables globales y como fuente de tipos para InferenciaTiposC.
+                        generarArchivoC(generadorC3D, archivo, "_", "main", globalPig, firmasExternas);
+                    } else if (salida == TipoSalida.RISC_V) {
+                        generarArchivoRiscVPrograma(generadorC3D, archivo);
+                    }
 
                 } catch (Exception exC3D) {
                     String detalle = exC3D.getMessage() != null ? exC3D.getMessage() : exC3D.getClass().getSimpleName();
