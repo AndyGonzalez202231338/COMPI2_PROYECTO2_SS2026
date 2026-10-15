@@ -333,12 +333,28 @@ public class MainController implements ArbolController.EscuchaArbol, EditorContr
         // Raiz del proyecto que contiene el archivo: ahi tambien se buscan los .y/.z que importa un .pig.
         File raizProyecto = arbolController.getProyectoQueContiene(archivo);
         editor.getEditor().limpiarMarcasDeError();
-        escribirInfo("Analizando " + archivo.getName() + " (backend " + backend + ")...");
+
+        boolean esPig = archivo.getName().toLowerCase().endsWith(".pig");
+        ServicioAnalisis.TipoSalida salida = "RISC-V".equals(backend)
+                ? ServicioAnalisis.TipoSalida.RISC_V
+                : ServicioAnalisis.TipoSalida.C;
+
+        if (esPig) {
+            escribirInfo("Analizando " + archivo.getName() + " (backend " + backend + ")...");
+        } else {
+            // Solo el .pig tiene "main": es el unico archivo que genera un ejecutable
+            // completo. Un .y o un .z sueltos igual se analizan (errores, tabla de
+            // simbolos, cuadruplas, C3D en los paneles), pero no producen .c ni .s:
+            // abre el .pig que los importa para generar el programa completo.
+            escribirInfo("Analizando " + archivo.getName()
+                    + " (solo verificacion; " + archivo.getName()
+                    + " no tiene 'main' asi que no genera .c/.s -- abre el .pig que lo importa para eso)...");
+        }
 
         Task<ResultadoAnalisis> tarea = new Task<>() {
             @Override
             protected ResultadoAnalisis call() {
-                return new ServicioAnalisis(raizProyecto).analizar(archivo, texto);
+                return new ServicioAnalisis(raizProyecto).analizar(archivo, texto, salida);
             }
         };
         tarea.setOnSucceeded(evento -> mostrarResultadoAnalisis(editor, tarea.getValue()));
