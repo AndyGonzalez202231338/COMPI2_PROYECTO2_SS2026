@@ -959,6 +959,14 @@ public final class TraductorCuadruplaRiscV {
     //   - nombre en la pila -> lw reg, offset(fp)
     // Los literales de cadena y caracter no se manejan aqui (subfase 7 / casos de print).
     private void cargar(String operando, String reg, StringBuilder sb) {
+
+        if (esFlotanteLiteral(operando)) {
+            float val = Float.parseFloat(operando);
+            int bits = Float.floatToRawIntBits(val);
+            sb.append("    li ").append(reg).append(", ").append(bits).append("\n");
+            return;
+        }
+
         if (operando == null) {
             sb.append("    li ").append(reg).append(", 0\n");
             return;

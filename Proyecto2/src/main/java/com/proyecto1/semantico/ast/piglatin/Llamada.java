@@ -27,6 +27,10 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
      * no corrió o falló.
      */
     private Simbolo simboloResuelto;
+    // Clase del tipo declarado del receptor (para dispatch dinamico).
+    private Simbolo claseReceptor;
+    // true si el metodo puede estar sobreescrito por alguna subclase.
+    private boolean despachoDinamico;
 
     /**
      * Clase del objeto en el caso "obj.m(args)". Null en el caso "f(args)" (o si
@@ -86,6 +90,8 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
                 return TipoPrimitivo.DESCONOCIDO;
             }
             this.simboloResuelto = m;
+            this.claseReceptor = tc.getDefinicion();
+            this.despachoDinamico = m.getCategoria() == CategoriaSimbolo.METODO && m.getModificador() != ModificadorAcceso.PRIVATE;
             // La etiqueta C3D es la de la clase que declara el metodo: un metodo heredado
             // vive en la clase padre (Persona_saludar aunque el objeto sea un Profesor).
             this.nombreClaseObjetivo = (m.getClaseDuena() != null)
@@ -154,14 +160,6 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
             lugaresArgs.add(v.getLugar());
         }
 
-        // Bloque de params: receptor (si aplica) + args.
-        if (receptor != null) {
-            generador.emitirParam(receptor);
-        }
-        for (String lugar : lugaresArgs) {
-            generador.emitirParam(lugar);
-        }
-
         // ¿El método devuelve void? Si es así, el call va SIN destino y
         //    devolvemos vacio() (nadie consume el resultado: verificar() ya
         //    rechazó que un void se use en contexto de expresión).
@@ -172,6 +170,7 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
 
         // Emitir la llamada con la etiqueta correcta según el caso.
         if (objetivo instanceof Identificador id) {
+            for (String lugar : lugaresArgs) generador.emitirParam(lugar);
             if (esVoid) {
                 generador.emitirCall(id.getNombre(), argumentos.size(), null);
                 return ResultadoC3D.vacio();
@@ -182,9 +181,9 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
         }
 
         // Caso "obj.m(args)": receptor ya evaluado, +1 al número de argumentos.
+        // Caso "obj.m(args)": receptor ya evaluado, +1 al numero de argumentos.
         if (objetivo instanceof AccesoCampo ac) {
             String clase = (nombreClaseObjetivo != null) ? nombreClaseObjetivo : "?";
-            // Tipos FORMALES del símbolo resuelto (para mangling coherente con Z).
             List<com.proyecto1.semantico.tipos.Tipo> tiposFormales = new java.util.ArrayList<>();
             if (simboloResuelto != null) {
                 for (com.proyecto1.semantico.tabla.Simbolo p : simboloResuelto.getParametros()) {
@@ -194,16 +193,68 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
                 }
             }
             String etiqueta = GeneradorC3D.etiquetaMetodo(clase, ac.getCampo(), tiposFormales);
-            if (esVoid) {
-                generador.emitirCall(etiqueta, argumentos.size() + 1, null);
-                return ResultadoC3D.vacio();
+            String resultado = esVoid ? null : generador.nuevoTemporal();
+
+            // Dispatch dinamico si alguna subclase sobreescribe el metodo.
+            if (despachoDinamico && claseReceptor != null && simboloResuelto != null) {
+                java.util.List<GeneradorC3D.EntradaDispatch> entradas =
+                        generador.dispatchPara(claseReceptor, simboloResuelto);
+                if (GeneradorC3D.necesitaDispatch(entradas)) {
+                    emitirDispatch(generador, receptor, lugaresArgs, entradas,
+                            etiqueta, resultado, argumentos.size() + 1);
+                    return (resultado == null)
+                            ? ResultadoC3D.vacio()
+                            : ResultadoC3D.temporal(resultado, tipoRetorno);
+                }
             }
-            String t = generador.nuevoTemporal();
-            generador.emitirCall(etiqueta, argumentos.size() + 1, t);
-            return ResultadoC3D.temporal(t, tipoRetorno);
+
+            // Call directo: nadie sobreescribe o no es virtual.
+            generador.emitirParam(receptor);
+            for (String lugar : lugaresArgs) generador.emitirParam(lugar);
+            generador.emitirCall(etiqueta, argumentos.size() + 1, resultado);
+            return (resultado == null)
+                    ? ResultadoC3D.vacio()
+                    : ResultadoC3D.temporal(resultado, tipoRetorno);
         }
 
         throw new UnsupportedOperationException(
                 "Llamada con objetivo " + objetivo.getClass().getSimpleName() + ": no soportado en C3D");
+    }
+
+    // Dispatch dinamico con if-chain (misma logica que Llamada.java de Z).
+    private void emitirDispatch(GeneradorC3D generador, String receptor,
+                                List<String> lugaresArgs,
+                                java.util.List<GeneradorC3D.EntradaDispatch> entradas,
+                                String etiquetaPorDefecto, String resultado, int nArgs) {
+        String classId = generador.nuevoTemporal();
+        generador.emitirCargaCampo(receptor, GeneradorC3D.CAMPO_CLASS_ID, classId);
+
+        java.util.Map<String, String> casoPorFuncion = new java.util.LinkedHashMap<>();
+        for (GeneradorC3D.EntradaDispatch e : entradas) {
+            if (e.etiqueta().equals(etiquetaPorDefecto)) continue;
+            String caso = casoPorFuncion.computeIfAbsent(e.etiqueta(), k -> generador.nuevaEtiqueta());
+            String cmp = generador.nuevoTemporal();
+            generador.emitirBinaria("==", classId, String.valueOf(e.classId()), cmp);
+            generador.emitirIfTrue(cmp, caso);
+        }
+
+        String fin = generador.nuevaEtiqueta();
+
+        // Caso por defecto
+        generador.emitirParam(receptor);
+        for (String lugar : lugaresArgs) generador.emitirParam(lugar);
+        generador.emitirCall(etiquetaPorDefecto, nArgs, resultado);
+        generador.emitirGoto(fin);
+
+        // Casos alternativos
+        for (java.util.Map.Entry<String, String> caso : casoPorFuncion.entrySet()) {
+            generador.emitirEtiqueta(caso.getValue());
+            generador.emitirParam(receptor);
+            for (String lugar : lugaresArgs) generador.emitirParam(lugar);
+            generador.emitirCall(caso.getKey(), nArgs, resultado);
+            generador.emitirGoto(fin);
+        }
+
+        generador.emitirEtiqueta(fin);
     }
 }

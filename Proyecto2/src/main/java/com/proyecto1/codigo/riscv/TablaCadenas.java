@@ -57,7 +57,7 @@ public final class TablaCadenas {
     // Emite la seccion .data: primero cadenas (.asciiz), luego flotantes (.word).
     public void emitirSeccionData(StringBuilder sb) {
         for (Map.Entry<String, String> e : etiquetas.entrySet()) {
-            sb.append(e.getValue()).append(": .asciiz ")
+            sb.append(e.getValue()).append(": .string ")
               .append(aJsonAscii(e.getKey())).append("\n");
         }
         if (!flotantes.isEmpty()) {

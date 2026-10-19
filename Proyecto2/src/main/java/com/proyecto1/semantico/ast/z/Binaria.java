@@ -70,6 +70,15 @@ public final class Binaria extends NodoZ implements ExpresionZ {
         ResultadoC3D a = izquierdo.generarC3D(generador);
         ResultadoC3D b = derecho.generarC3D(generador);
 
+        // Si el operador es "+" y alguno de los tipos es CADENA, emitir concat
+        // en vez de una suma aritmetica.
+        if (operador.equals("+")
+                && (a.getTipo() == TipoPrimitivo.CADENA || b.getTipo() == TipoPrimitivo.CADENA)) {
+            String t = generador.nuevoTemporal();
+            generador.emitirConcat(a.getLugar(), b.getLugar(), t);
+            return ResultadoC3D.temporal(t, TipoPrimitivo.CADENA);
+        }
+
         Tipo tipo;
         switch (operador) {
             case "+": case "-": case "*": case "/": case "%":
