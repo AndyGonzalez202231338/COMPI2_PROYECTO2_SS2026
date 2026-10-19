@@ -334,6 +334,19 @@ public class ASTBuilderPigLatin extends GramaticaPigLatinBaseVisitor<NodoAST> {
                 linea(ctx), columna(ctx));
     }
 
+    /**
+     * ESTO nombre DOSPUNTOS expresion DOSPUNTOS tipoDeclarado
+     * Ejemplo: esto cir : novus Circulo("Rojo", 5.0) : Figura;
+     * Ejemplo: esto figNula : null : Figura;
+     */
+    @Override
+    public NodoAST visitDeclaracionVarObjetoTipado(GramaticaPigLatin.DeclaracionVarObjetoTipadoContext ctx) {
+        String nombre = ctx.nombre.getText();
+        ExpresionPigLatin init = construirExpresion(ctx.expresion());
+        String tipoDeclarado = ctx.tipoDeclarado.getText();
+        return DeclaracionVariable.objetoTipado(nombre, init, tipoDeclarado, linea(ctx), columna(ctx));
+    }
+
     /** ESTO ID DOSPUNTOS expresion  (sin tipo explícito; se infiere del valor). */
     @Override
     public NodoAST visitDeclaracionVarSoloValor(GramaticaPigLatin.DeclaracionVarSoloValorContext ctx) {

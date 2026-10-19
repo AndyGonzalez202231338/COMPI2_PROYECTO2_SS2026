@@ -53,6 +53,17 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                 null, null, linea, columna);
     }
 
+    /**
+     * esto nombre : expresion : TipoDeclarado;
+     * La expresion puede ser "novus Clase(args)" o "null". El tipoDeclarado es el
+     * nombre de la clase declarada (puede ser una superclase del objeto instanciado).
+     */
+    public static DeclaracionVariable objetoTipado(String nombre, ExpresionPigLatin inicializador,
+                                                   String tipoDeclarado, int linea, int columna) {
+        return new DeclaracionVariable(CategoriaDeclaracionVariable.OBJETO_TIPADO, nombre, null,
+                inicializador, tipoDeclarado, null, linea, columna);
+    }
+
     public CategoriaDeclaracionVariable getCategoria() { return categoria; }
     public String getNombre() { return nombre; }
     public NodoTipoRef getTipo() { return tipo; }
@@ -107,6 +118,34 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
             case SOLO_VALOR:
                 t = inicializador.verificar(ambito, errores);
                 this.tipoCache = t;
+                break;
+            case OBJETO_TIPADO:
+                // Resolver el tipo declarado (el ID despues del segundo ':')
+                Simbolo simTipoDeclarado = ambito.resolver(nombreTipoEstructura);
+                if (simTipoDeclarado == null) {
+                    errores.reportar(linea, columna,
+                            "Tipo no encontrado: '" + nombreTipoEstructura + "'");
+                    t = TipoPrimitivo.DESCONOCIDO;
+                } else if (simTipoDeclarado.getCategoria() == CategoriaSimbolo.CLASE) {
+                    t = new TipoClase(simTipoDeclarado);
+                } else if (simTipoDeclarado.getCategoria() == CategoriaSimbolo.ESTRUCTURA) {
+                    t = new TipoEstructura(simTipoDeclarado);
+                } else {
+                    errores.reportar(linea, columna,
+                            "'" + nombreTipoEstructura + "' no es una clase ni estructura");
+                    t = TipoPrimitivo.DESCONOCIDO;
+                }
+                this.tipoCache = t;
+                // Verificar el inicializador si no es null literal
+                if (inicializador != null) {
+                    Tipo tipoInit = inicializador.verificar(ambito, errores);
+                    if (tipoInit != null && tipoInit != TipoPrimitivo.NULO
+                            && !Tipos.esAsignable(t, tipoInit)) {
+                        errores.reportar(linea, columna,
+                                "No se puede asignar " + tipoInit.nombre()
+                                        + " a variable de tipo " + t.nombre());
+                    }
+                }
                 break;
             case ESTRUCTURA:
                 Simbolo s = ambito.resolver(nombreTipoEstructura);
@@ -222,6 +261,13 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
             case SOLO_VALOR: {
                 ResultadoC3D v = inicializador.generarC3D(generador);
                 generador.emitirAsignacion(v.getLugar(), destino);
+                return ResultadoC3D.vacio();
+            }
+            case OBJETO_TIPADO: {
+                if (inicializador != null) {
+                    ResultadoC3D v = inicializador.generarC3D(generador);
+                    generador.emitirAsignacion(v.getLugar(), destino);
+                }
                 return ResultadoC3D.vacio();
             }
             case ESTRUCTURA: {

@@ -246,7 +246,7 @@ public final class OrquestadorRiscV {
         if (esEntrada) {
             // Funcion de entrada (main): en vez de retornar a nadie, termina el programa.
             // Venus: codigo del servicio en a0. El 10 termina el programa.
-            sb.append("    li a0, 10\n");
+            sb.append("    li a7, 10\n");
             sb.append("    ecall\n\n");
         } else {
             sb.append("    ret\n\n");
