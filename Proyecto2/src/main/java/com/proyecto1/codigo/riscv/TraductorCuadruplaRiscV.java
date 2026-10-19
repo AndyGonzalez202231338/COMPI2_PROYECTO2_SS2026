@@ -366,29 +366,29 @@ public final class TraductorCuadruplaRiscV {
         String tipo = tipoParaImprimir(q);
         switch (tipo) {
             case "cadena" -> {
-                cargar(q.valor(), "a1", sb);        // a1 = direccion de la cadena
-                sb.append("    li a0, 4\n");
+                cargar(q.valor(), "a0", sb);
+                sb.append("    li a7, 4\n");
                 sb.append("    ecall\n");
             }
             case "caracter" -> {
-                cargar(q.valor(), "a1", sb);        // a1 = codigo ASCII
-                sb.append("    li a0, 11\n");
+                cargar(q.valor(), "a0", sb);
+                sb.append("    li a7, 11\n");
                 sb.append("    ecall\n");
             }
             case "flotante" -> {
                 cargarFloat(q.valor(), "fa0", sb);
-                sb.append("    li a0, 2\n");
+                sb.append("    li a7, 2\n");
                 sb.append("    ecall\n");
             }
-            default -> {                            // entero, bool (0/1) y desconocido
-                cargar(q.valor(), "a1", sb);
-                sb.append("    li a0, 1\n");
+            default -> {
+                cargar(q.valor(), "a0", sb);
+                sb.append("    li a7, 1\n");
                 sb.append("    ecall\n");
             }
         }
         if (q.nuevaLinea()) {
-            sb.append("    li a1, 10\n");          // 10 = codigo ASCII del salto de linea
-            sb.append("    li a0, 11\n");
+            sb.append("    li a0, 10\n");
+            sb.append("    li a7, 11\n");
             sb.append("    ecall\n");
         }
     }
@@ -410,9 +410,10 @@ public final class TraductorCuadruplaRiscV {
     // reserva heap y termina). Por eso la lectura deja 0 en el destino, para que el
     // programa pueda seguir. Con otro emulador (RARS) aqui iria su ecall de lectura.
     private void traducirRead(CuadruplaRead q, StringBuilder sb) {
-        sb.append("    # Venus no permite leer del teclado: se guarda 0\n");
-        sb.append("    li t0, 0\n");
-        guardar("t0", q.destino(), sb);
+        // RARS ecall 5: lee un entero del teclado y lo deja en a0.
+        sb.append("    li a7, 5\n");
+        sb.append("    ecall\n");
+        guardar("a0", q.destino(), sb);
     }
 
     // ===============================================================

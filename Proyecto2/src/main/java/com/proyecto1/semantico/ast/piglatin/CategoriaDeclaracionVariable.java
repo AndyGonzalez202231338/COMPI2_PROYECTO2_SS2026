@@ -14,5 +14,6 @@ package com.proyecto1.semantico.ast.piglatin;
 public enum CategoriaDeclaracionVariable {
     CON_TIPO,
     ESTRUCTURA,
-    SOLO_VALOR
+    SOLO_VALOR,
+    OBJETO_TIPADO
 }
