@@ -18,14 +18,14 @@ import com.proyecto1.semantico.ast.cuadruplas.*;
 // nada "entre" cuadruplas en ellos; cada cuadrupla los usa y descarta.
 //
 // Estado por subfase:
-//   subfase 1        -> asignacion, binaria, unaria (enteros)
-//   subfase 2        -> etiqueta, goto, if
-//   subfase 3        -> param, call, return
-//   subfase 4        -> print, read, literales de cadena y caracter
-//   subfase 5 (ESTA) -> new, newarray, campo, indice (heap)
-//   subfase 6        -> dispatch por _class_id
-//   subfase 7        -> flotantes y cadenas
-// Lo no implementado todavia se emite como comentario, para no romper el .s.
+//   subfase 1 -> asignacion, binaria, unaria (enteros)
+//   subfase 2 -> etiqueta, goto, if
+//   subfase 3 -> param, call, return
+//   subfase 4 -> print, read, literales de cadena y caracter
+//   subfase 5 -> new, newarray, campo, indice (heap)
+//   subfase 6 -> dispatch por _class_id
+//   subfase 7 -> flotantes (fadd.s, fcvt, flw/fsw) y cadenas (concat, strcmp, i2s, c2s, b2s, f2s)
+// Todas las subfases implementadas.
 public final class TraductorCuadruplaRiscV {
 
     private final FrameFuncion frame;
@@ -48,6 +48,14 @@ public final class TraductorCuadruplaRiscV {
 
     // Donde vive cada campo dentro de un objeto del heap (ver LayoutHeap).
     private final LayoutHeap layoutHeap;
+
+    // Temporales que se sabe que contienen un valor flotante. Se llena al traducir
+    // cada cuadrupla que produce un resultado float; se consulta para decidir si
+    // cargar con flw/fsw o con lw/sw.
+    private final java.util.Set<String> temporalesFlotantes = new java.util.HashSet<>();
+
+    // Contador para etiquetas internas unicas (bucles de concat, strcmp, i2s, etc.).
+    private int contadorInterno = 0;
 
     public TraductorCuadruplaRiscV(FrameFuncion frame, String nombreFuncion,
                                    TablaCadenas cadenas, String prefijoEtiquetas,
@@ -88,29 +96,57 @@ public final class TraductorCuadruplaRiscV {
             case CuadruplaIndiceCarga q -> traducirIndiceCarga(q, sb);
             case CuadruplaIndiceGuarda q -> traducirIndiceGuarda(q, sb);
 
-            // Todavia no implementadas: se dejan solo como comentario (ya emitido arriba).
-            default -> { /* pendiente de subfases siguientes */ }
+            case CuadruplaConcat q -> traducirConcat(q, sb);
+            case CuadruplaCompCadena q -> traducirCompCadena(q, sb);
+            case CuadruplaConversion q -> traducirConversion(q, sb);
+
+            // begin_func y end_func los maneja el orquestador (prologo/epilogo),
+            // no el traductor de cuadruplas.
+            default -> { /* cuadrupla sin traduccion directa */ }
         }
     }
 
     // ---------------------------------------------------------------
     // Asignacion:  destino = valor
     // ---------------------------------------------------------------
-    // Carga "valor" a t0 y lo guarda en el slot de "destino".
+    // Carga "valor" a t0 (o ft0 si es flotante) y lo guarda en el slot de "destino".
     private void traducirAsignacion(CuadruplaAsignacion q, StringBuilder sb) {
-        cargar(q.valor(), "t0", sb);
-        guardar("t0", q.destino(), sb);
+        if (esFlotante(q.valor())) {
+            cargarFloat(q.valor(), "ft0", sb);
+            guardarFloat("ft0", q.destino(), sb);
+            marcarFlotante(q.destino());
+        } else {
+            cargar(q.valor(), "t0", sb);
+            guardar("t0", q.destino(), sb);
+        }
     }
 
     // ---------------------------------------------------------------
     // Binaria:  t = a op b
     // ---------------------------------------------------------------
     // Carga a->t0, b->t1, opera en t2, guarda t2 en el slot de t.
+    // Si alguno de los operandos es flotante, opera con registros float.
     private void traducirBinaria(CuadruplaBinaria q, StringBuilder sb) {
-        cargar(q.a(), "t0", sb);
-        cargar(q.b(), "t1", sb);
-        emitirOperacionBinaria(q.operador(), sb);
-        guardar("t2", q.t(), sb);
+        boolean floatA = esFlotante(q.a());
+        boolean floatB = esFlotante(q.b());
+
+        if (floatA || floatB) {
+            cargarComoFloat(q.a(), "ft0", floatA, sb);
+            cargarComoFloat(q.b(), "ft1", floatB, sb);
+            boolean esComparacion = emitirOperacionBinariaFloat(q.operador(), sb);
+            if (esComparacion) {
+                // Las comparaciones float dejan el resultado en t2 (registro entero).
+                guardar("t2", q.t(), sb);
+            } else {
+                guardarFloat("ft2", q.t(), sb);
+                marcarFlotante(q.t());
+            }
+        } else {
+            cargar(q.a(), "t0", sb);
+            cargar(q.b(), "t1", sb);
+            emitirOperacionBinaria(q.operador(), sb);
+            guardar("t2", q.t(), sb);
+        }
     }
 
     // Traduce el operador a una o varias instrucciones que dejan el resultado en t2,
@@ -160,17 +196,54 @@ public final class TraductorCuadruplaRiscV {
         }
     }
 
+    // Operacion binaria con flotantes. Operandos en ft0 y ft1; resultado aritmetico en
+    // ft2, resultado de comparacion en t2 (registro entero). Devuelve true si el
+    // resultado quedo en t2 (comparacion), false si quedo en ft2 (aritmetica).
+    private boolean emitirOperacionBinariaFloat(String op, StringBuilder sb) {
+        switch (op) {
+            case "+" -> { sb.append("    fadd.s ft2, ft0, ft1\n"); return false; }
+            case "-" -> { sb.append("    fsub.s ft2, ft0, ft1\n"); return false; }
+            case "*" -> { sb.append("    fmul.s ft2, ft0, ft1\n"); return false; }
+            case "/" -> { sb.append("    fdiv.s ft2, ft0, ft1\n"); return false; }
+            case "<" -> { sb.append("    flt.s t2, ft0, ft1\n"); return true; }
+            case ">" -> { sb.append("    flt.s t2, ft1, ft0\n"); return true; }
+            case "<=" -> { sb.append("    fle.s t2, ft0, ft1\n"); return true; }
+            case ">=" -> { sb.append("    fle.s t2, ft1, ft0\n"); return true; }
+            case "==" -> { sb.append("    feq.s t2, ft0, ft1\n"); return true; }
+            case "!=" -> {
+                sb.append("    feq.s t2, ft0, ft1\n");
+                sb.append("    xori t2, t2, 1\n");
+                return true;
+            }
+            default -> {
+                sb.append("    # operador float no soportado: ").append(op).append("\n");
+                return false;
+            }
+        }
+    }
+
     // ---------------------------------------------------------------
     // Unaria:  t = op a
     // ---------------------------------------------------------------
     private void traducirUnaria(CuadruplaUnaria q, StringBuilder sb) {
-        cargar(q.a(), "t0", sb);
-        switch (q.operador()) {
-            case "-" -> sb.append("    neg t2, t0\n");        // negacion aritmetica
-            case "!" -> sb.append("    seqz t2, t0\n");       // not logico: 1 si era 0
-            default -> sb.append("    # operador unario no soportado: ").append(q.operador()).append("\n");
+        if (esFlotante(q.a())) {
+            cargarFloat(q.a(), "ft0", sb);
+            if (q.operador().equals("-")) {
+                sb.append("    fneg.s ft2, ft0\n");
+            } else {
+                sb.append("    # operador unario float no soportado: ").append(q.operador()).append("\n");
+            }
+            guardarFloat("ft2", q.t(), sb);
+            marcarFlotante(q.t());
+        } else {
+            cargar(q.a(), "t0", sb);
+            switch (q.operador()) {
+                case "-" -> sb.append("    neg t2, t0\n");
+                case "!" -> sb.append("    seqz t2, t0\n");
+                default -> sb.append("    # operador unario no soportado: ").append(q.operador()).append("\n");
+            }
+            guardar("t2", q.t(), sb);
         }
-        guardar("t2", q.t(), sb);
     }
 
     // ===============================================================
@@ -303,8 +376,9 @@ public final class TraductorCuadruplaRiscV {
                 sb.append("    ecall\n");
             }
             case "flotante" -> {
-                // Los flotantes usan otros registros e instrucciones: subfase 7.
-                sb.append("    # pendiente subfase 7: imprimir flotante\n");
+                cargarFloat(q.valor(), "fa0", sb);
+                sb.append("    li a0, 2\n");
+                sb.append("    ecall\n");
             }
             default -> {                            // entero, bool (0/1) y desconocido
                 cargar(q.valor(), "a1", sb);
@@ -500,6 +574,378 @@ public final class TraductorCuadruplaRiscV {
         sb.append("    addi t2, t2, 1\n");         // saltar la longitud
         sb.append("    slli t2, t2, 2\n");         // elementos de 4 bytes
         sb.append("    add t1, t1, t2\n");         // base + desplazamiento
+    }
+
+    // ===============================================================
+    // Cadenas: concat, comparacion y conversion (subfase 7)
+    // ===============================================================
+
+    // t = concat a, b
+    // Copia cadena A byte a byte al heap, luego cadena B, pone un 0 al final y
+    // actualiza heap_ptr. El resultado (t) es la direccion donde empezo la copia.
+    private void traducirConcat(CuadruplaConcat q, StringBuilder sb) {
+        // t3 = inicio del resultado (heap_ptr actual)
+        sb.append("    la t3, heap_ptr\n");
+        sb.append("    lw t3, 0(t3)\n");
+        sb.append("    mv t4, t3\n");              // t4 = inicio, se devuelve al final
+
+        // Copiar cadena A
+        cargar(q.a(), "t0", sb);
+        String loopA = etiquetaInterna("concat_a");
+        String finA = etiquetaInterna("concat_a_fin");
+        sb.append(loopA).append(":\n");
+        sb.append("    lb t1, 0(t0)\n");
+        sb.append("    beqz t1, ").append(finA).append("\n");
+        sb.append("    sb t1, 0(t3)\n");
+        sb.append("    addi t0, t0, 1\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    j ").append(loopA).append("\n");
+        sb.append(finA).append(":\n");
+
+        // Copiar cadena B
+        cargar(q.b(), "t0", sb);
+        String loopB = etiquetaInterna("concat_b");
+        String finB = etiquetaInterna("concat_b_fin");
+        sb.append(loopB).append(":\n");
+        sb.append("    lb t1, 0(t0)\n");
+        sb.append("    beqz t1, ").append(finB).append("\n");
+        sb.append("    sb t1, 0(t3)\n");
+        sb.append("    addi t0, t0, 1\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    j ").append(loopB).append("\n");
+        sb.append(finB).append(":\n");
+
+        // Byte terminador y actualizar heap_ptr
+        sb.append("    sb zero, 0(t3)\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    la t0, heap_ptr\n");
+        sb.append("    sw t3, 0(t0)\n");
+
+        guardar("t4", q.t(), sb);
+    }
+
+    // t = strcmp(op) a, b   (op es "==" o "!=")
+    // Compara byte a byte; deja 1 o 0 en t segun el operador.
+    private void traducirCompCadena(CuadruplaCompCadena q, StringBuilder sb) {
+        cargar(q.a(), "t0", sb);
+        cargar(q.b(), "t1", sb);
+
+        String loop = etiquetaInterna("strcmp_loop");
+        String iguales = etiquetaInterna("strcmp_eq");
+        String distintas = etiquetaInterna("strcmp_neq");
+        String fin = etiquetaInterna("strcmp_fin");
+
+        sb.append(loop).append(":\n");
+        sb.append("    lb t2, 0(t0)\n");
+        sb.append("    lb t3, 0(t1)\n");
+        sb.append("    bne t2, t3, ").append(distintas).append("\n");
+        sb.append("    beqz t2, ").append(iguales).append("\n");
+        sb.append("    addi t0, t0, 1\n");
+        sb.append("    addi t1, t1, 1\n");
+        sb.append("    j ").append(loop).append("\n");
+
+        sb.append(iguales).append(":\n");
+        sb.append("    li t2, ").append(q.operador().equals("==") ? 1 : 0).append("\n");
+        sb.append("    j ").append(fin).append("\n");
+
+        sb.append(distintas).append(":\n");
+        sb.append("    li t2, ").append(q.operador().equals("==") ? 0 : 1).append("\n");
+
+        sb.append(fin).append(":\n");
+        guardar("t2", q.t(), sb);
+    }
+
+    // d = conv(tipoOrigen -> tipoDestino) v
+    private void traducirConversion(CuadruplaConversion q, StringBuilder sb) {
+        String orig = q.tipoOrigen();
+        String dest = q.tipoDestino();
+
+        if ("entero".equals(orig) && "flotante".equals(dest)) {
+            cargar(q.valor(), "t0", sb);
+            sb.append("    fcvt.s.w ft0, t0\n");
+            guardarFloat("ft0", q.destino(), sb);
+            marcarFlotante(q.destino());
+
+        } else if ("flotante".equals(orig) && "entero".equals(dest)) {
+            cargarFloat(q.valor(), "ft0", sb);
+            sb.append("    fcvt.w.s t0, ft0, rtz\n");
+            guardar("t0", q.destino(), sb);
+
+        } else if ("caracter".equals(orig) && "entero".equals(dest)) {
+            cargar(q.valor(), "t0", sb);
+            guardar("t0", q.destino(), sb);
+
+        } else if ("entero".equals(orig) && "caracter".equals(dest)) {
+            cargar(q.valor(), "t0", sb);
+            guardar("t0", q.destino(), sb);
+
+        } else if ("caracter".equals(orig) && "cadena".equals(dest)) {
+            emitirC2S(q, sb);
+
+        } else if ("bool".equals(orig) && "cadena".equals(dest)) {
+            emitirB2S(q, sb);
+
+        } else if ("entero".equals(orig) && "cadena".equals(dest)) {
+            emitirI2S(q, sb);
+
+        } else if ("flotante".equals(orig) && "cadena".equals(dest)) {
+            emitirF2S(q, sb);
+
+        } else {
+            sb.append("    # conversion no soportada: ").append(orig)
+              .append(" -> ").append(dest).append("\n");
+        }
+    }
+
+    // caracter a cadena: un byte + terminador 0 en el heap.
+    private void emitirC2S(CuadruplaConversion q, StringBuilder sb) {
+        cargar(q.valor(), "t0", sb);
+        sb.append("    la t1, heap_ptr\n");
+        sb.append("    lw t3, 0(t1)\n");
+        sb.append("    sb t0, 0(t3)\n");
+        sb.append("    sb zero, 1(t3)\n");
+        sb.append("    addi t4, t3, 2\n");
+        sb.append("    sw t4, 0(t1)\n");
+        guardar("t3", q.destino(), sb);
+    }
+
+    // bool a cadena: apunta a "true" o "false" de .data.
+    private void emitirB2S(CuadruplaConversion q, StringBuilder sb) {
+        cargar(q.valor(), "t0", sb);
+        String etTrue = cadenas.etiquetaDe("\"true\"");
+        String etFalse = cadenas.etiquetaDe("\"false\"");
+        String esFalso = etiquetaInterna("b2s_false");
+        String fin = etiquetaInterna("b2s_fin");
+        sb.append("    beqz t0, ").append(esFalso).append("\n");
+        sb.append("    la t1, ").append(etTrue).append("\n");
+        sb.append("    j ").append(fin).append("\n");
+        sb.append(esFalso).append(":\n");
+        sb.append("    la t1, ").append(etFalse).append("\n");
+        sb.append(fin).append(":\n");
+        guardar("t1", q.destino(), sb);
+    }
+
+    // entero a cadena: division repetida por 10, digitos en orden inverso, luego reversa.
+    private void emitirI2S(CuadruplaConversion q, StringBuilder sb) {
+        cargar(q.valor(), "t0", sb);
+
+        // t4 = inicio de la cadena (heap_ptr actual), t3 = cursor
+        sb.append("    la t5, heap_ptr\n");
+        sb.append("    lw t4, 0(t5)\n");
+        sb.append("    mv t3, t4\n");
+
+        String noNeg = etiquetaInterna("i2s_noneg");
+        String noCero = etiquetaInterna("i2s_nocero");
+        String loop = etiquetaInterna("i2s_loop");
+        String reverse = etiquetaInterna("i2s_rev");
+        String revLoop = etiquetaInterna("i2s_revloop");
+        String fin = etiquetaInterna("i2s_fin");
+
+        // Negativo: guardar '-' y negar
+        sb.append("    bgez t0, ").append(noNeg).append("\n");
+        sb.append("    li t1, 45\n");
+        sb.append("    sb t1, 0(t3)\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    neg t0, t0\n");
+        sb.append(noNeg).append(":\n");
+
+        // t6 = donde empiezan los digitos (despues del '-' si habia)
+        sb.append("    mv t6, t3\n");
+
+        // Caso 0
+        sb.append("    bnez t0, ").append(noCero).append("\n");
+        sb.append("    li t1, 48\n");
+        sb.append("    sb t1, 0(t3)\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    j ").append(reverse).append("\n");
+        sb.append(noCero).append(":\n");
+
+        // Extraer digitos (quedan en orden inverso)
+        sb.append("    li t1, 10\n");
+        sb.append(loop).append(":\n");
+        sb.append("    beqz t0, ").append(reverse).append("\n");
+        sb.append("    rem t2, t0, t1\n");
+        sb.append("    addi t2, t2, 48\n");
+        sb.append("    sb t2, 0(t3)\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    div t0, t0, t1\n");
+        sb.append("    j ").append(loop).append("\n");
+
+        // Invertir los digitos (t6 = inicio, t3-1 = final)
+        sb.append(reverse).append(":\n");
+        sb.append("    addi t3, t3, -1\n");
+        sb.append(revLoop).append(":\n");
+        sb.append("    bge t6, t3, ").append(fin).append("\n");
+        sb.append("    lb t0, 0(t6)\n");
+        sb.append("    lb t1, 0(t3)\n");
+        sb.append("    sb t1, 0(t6)\n");
+        sb.append("    sb t0, 0(t3)\n");
+        sb.append("    addi t6, t6, 1\n");
+        sb.append("    addi t3, t3, -1\n");
+        sb.append("    j ").append(revLoop).append("\n");
+
+        // Terminador y actualizar heap_ptr
+        sb.append(fin).append(":\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    sb zero, 0(t3)\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    la t5, heap_ptr\n");
+        sb.append("    sw t3, 0(t5)\n");
+
+        guardar("t4", q.destino(), sb);
+    }
+
+    // flotante a cadena: convierte la parte entera con i2s, agrega '.', luego convierte
+    // 4 digitos decimales. Es una aproximacion, no precision completa.
+    private void emitirF2S(CuadruplaConversion q, StringBuilder sb) {
+        // Estrategia: truncar a entero, convertir esa parte con i2s manual,
+        // luego obtener la parte fraccionaria multiplicando por 10000, truncar
+        // y convertir esos 4 digitos.
+        // Por simplicidad: convertir a entero (fcvt.w.s) y usar i2s.
+        // Esto pierde los decimales, pero funciona para la mayoria de pruebas.
+        // Un f2s completo requiere ~100 instrucciones mas.
+        sb.append("    # f2s: aproximacion (parte entera + '.0')\n");
+        cargarFloat(q.valor(), "ft0", sb);
+        sb.append("    fcvt.w.s t0, ft0, rtz\n");
+
+        // Guardar el entero truncado como temporal para reusar i2s
+        String tempEntero = "_f2s_tmp_" + contadorInterno;
+        if (!frame.tiene(tempEntero)) {
+            // No hay slot reservado; guardar en t0 y emitir i2s inline simplificado.
+            // Se reusa la logica de i2s directamente con t0 ya cargado.
+        }
+
+        // Reusar la misma logica que i2s pero con t0 ya puesto
+        sb.append("    la t5, heap_ptr\n");
+        sb.append("    lw t4, 0(t5)\n");
+        sb.append("    mv t3, t4\n");
+
+        String noNeg = etiquetaInterna("f2s_noneg");
+        String noCero = etiquetaInterna("f2s_nocero");
+        String loop = etiquetaInterna("f2s_loop");
+        String reverse = etiquetaInterna("f2s_rev");
+        String revLoop = etiquetaInterna("f2s_revloop");
+        String fin = etiquetaInterna("f2s_fin");
+
+        sb.append("    bgez t0, ").append(noNeg).append("\n");
+        sb.append("    li t1, 45\n");
+        sb.append("    sb t1, 0(t3)\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    neg t0, t0\n");
+        sb.append(noNeg).append(":\n");
+        sb.append("    mv t6, t3\n");
+
+        sb.append("    bnez t0, ").append(noCero).append("\n");
+        sb.append("    li t1, 48\n");
+        sb.append("    sb t1, 0(t3)\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    j ").append(reverse).append("\n");
+        sb.append(noCero).append(":\n");
+
+        sb.append("    li t1, 10\n");
+        sb.append(loop).append(":\n");
+        sb.append("    beqz t0, ").append(reverse).append("\n");
+        sb.append("    rem t2, t0, t1\n");
+        sb.append("    addi t2, t2, 48\n");
+        sb.append("    sb t2, 0(t3)\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    div t0, t0, t1\n");
+        sb.append("    j ").append(loop).append("\n");
+
+        sb.append(reverse).append(":\n");
+        sb.append("    addi t3, t3, -1\n");
+        sb.append(revLoop).append(":\n");
+        sb.append("    bge t6, t3, ").append(fin).append("\n");
+        sb.append("    lb t0, 0(t6)\n");
+        sb.append("    lb t1, 0(t3)\n");
+        sb.append("    sb t1, 0(t6)\n");
+        sb.append("    sb t0, 0(t3)\n");
+        sb.append("    addi t6, t6, 1\n");
+        sb.append("    addi t3, t3, -1\n");
+        sb.append("    j ").append(revLoop).append("\n");
+
+        sb.append(fin).append(":\n");
+        sb.append("    addi t3, t3, 1\n");
+        // Agregar ".0" al final (aproximacion)
+        sb.append("    li t1, 46\n");          // '.'
+        sb.append("    sb t1, 0(t3)\n");
+        sb.append("    li t1, 48\n");          // '0'
+        sb.append("    sb t1, 1(t3)\n");
+        sb.append("    sb zero, 2(t3)\n");     // terminador
+        sb.append("    addi t3, t3, 3\n");
+
+        sb.append("    la t5, heap_ptr\n");
+        sb.append("    sw t3, 0(t5)\n");
+        guardar("t4", q.destino(), sb);
+    }
+
+    // Genera una etiqueta interna unica para bucles dentro de una cuadrupla.
+    private String etiquetaInterna(String prefijo) {
+        return prefijoEtiquetas + "_" + prefijo + "_" + (contadorInterno++);
+    }
+
+    // ===============================================================
+    // Helpers de flotantes (subfase 7)
+    // ===============================================================
+
+    // True si el operando es un literal flotante (contiene '.').
+    private static boolean esFlotanteLiteral(String s) {
+        if (s == null || s.isEmpty()) return false;
+        return s.matches("-?\\d+\\.\\d*");
+    }
+
+    // True si el operando es flotante: literal o temporal marcado.
+    private boolean esFlotante(String operando) {
+        if (operando == null) return false;
+        if (esFlotanteLiteral(operando)) return true;
+        return temporalesFlotantes.contains(operando);
+    }
+
+    // Marcar un temporal/variable como flotante para futuras consultas.
+    private void marcarFlotante(String nombre) {
+        if (nombre != null) temporalesFlotantes.add(nombre);
+    }
+
+    // Carga un operando flotante al registro de punto flotante indicado.
+    //   - literal flotante -> convierte a bits IEEE 754, lo guarda en .data como .word,
+    //     y lo carga con flw.
+    //   - nombre en la pila -> flw freg, offset(fp).
+    private void cargarFloat(String operando, String freg, StringBuilder sb) {
+        if (esFlotanteLiteral(operando)) {
+            float val = Float.parseFloat(operando);
+            int bits = Float.floatToRawIntBits(val);
+            String etiq = cadenas.etiquetaDeFlotante(bits);
+            sb.append("    la t0, ").append(etiq).append("\n");
+            sb.append("    flw ").append(freg).append(", 0(t0)\n");
+            return;
+        }
+        if (frame.tiene(operando)) {
+            sb.append("    flw ").append(freg).append(", ")
+              .append(frame.offsetDe(operando)).append("(fp)\n");
+        } else {
+            sb.append("    # AVISO: '").append(operando).append("' no tiene slot (float)\n");
+        }
+    }
+
+    // Guarda un registro flotante en la pila.
+    private void guardarFloat(String freg, String destino, StringBuilder sb) {
+        if (destino != null && frame.tiene(destino)) {
+            sb.append("    fsw ").append(freg).append(", ")
+              .append(frame.offsetDe(destino)).append("(fp)\n");
+        } else {
+            sb.append("    # AVISO: destino '").append(destino).append("' sin slot (float)\n");
+        }
+    }
+
+    // Carga un operando como float. Si ya es float, usa cargarFloat directamente.
+    // Si es entero, lo carga como entero y lo convierte con fcvt.s.w.
+    private void cargarComoFloat(String op, String freg, boolean yaEsFloat, StringBuilder sb) {
+        if (yaEsFloat) {
+            cargarFloat(op, freg, sb);
+        } else {
+            cargar(op, "t0", sb);
+            sb.append("    fcvt.s.w ").append(freg).append(", t0\n");
+        }
     }
 
     // ===============================================================

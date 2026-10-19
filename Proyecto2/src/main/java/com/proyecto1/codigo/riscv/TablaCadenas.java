@@ -32,6 +32,11 @@ public final class TablaCadenas {
     // la seccion .data salga en el orden en que aparecieron los literales.
     private final Map<String, String> etiquetas = new LinkedHashMap<>();
 
+    // Literales flotantes: bits IEEE 754 -> etiqueta (flt_0, flt_1, ...).
+    // Venus no acepta .float, asi que cada flotante se guarda como .word con los 32
+    // bits en formato IEEE 754. Se carga despues con flw.
+    private final Map<Integer, String> flotantes = new LinkedHashMap<>();
+
     // Recibe el literal tal como viene en el C3D (con comillas y escapes, por ejemplo
     // "Hola\n") y devuelve la etiqueta de .data donde quedara guardado.
     public String etiquetaDe(String literalC3D) {
@@ -39,15 +44,29 @@ public final class TablaCadenas {
         return etiquetas.computeIfAbsent(texto, k -> "str_" + etiquetas.size());
     }
 
-    public boolean estaVacia() {
-        return etiquetas.isEmpty();
+    // Registra un literal flotante por sus bits IEEE 754 y devuelve su etiqueta.
+    // Ejemplo: 3.14f -> bits 1078523331 -> etiqueta "flt_0".
+    public String etiquetaDeFlotante(int bitsIEEE) {
+        return flotantes.computeIfAbsent(bitsIEEE, k -> "flt_" + flotantes.size());
     }
 
-    // Emite una linea .asciiz por cada cadena registrada.
+    public boolean estaVacia() {
+        return etiquetas.isEmpty() && flotantes.isEmpty();
+    }
+
+    // Emite la seccion .data: primero cadenas (.asciiz), luego flotantes (.word).
     public void emitirSeccionData(StringBuilder sb) {
         for (Map.Entry<String, String> e : etiquetas.entrySet()) {
             sb.append(e.getValue()).append(": .asciiz ")
               .append(aJsonAscii(e.getKey())).append("\n");
+        }
+        if (!flotantes.isEmpty()) {
+            sb.append("# --- literales flotantes (bits IEEE 754 como .word) ---\n");
+            for (Map.Entry<Integer, String> e : flotantes.entrySet()) {
+                sb.append(e.getValue()).append(": .word ")
+                  .append(e.getKey()).append("  # float ")
+                  .append(Float.intBitsToFloat(e.getKey())).append("\n");
+            }
         }
     }
 
