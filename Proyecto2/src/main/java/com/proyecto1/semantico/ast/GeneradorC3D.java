@@ -464,6 +464,11 @@ public class GeneradorC3D {
         tabla.agregar(new CuadruplaCampoGuarda(obj, campo, v));
     }
 
+    // Variante con tipo del campo (para que el backend RISC-V sepa si es flotante).
+    public void emitirCargaCampo(String objeto, String campo, String destino, String tipoCampo) {
+        tabla.agregar(new CuadruplaCampoCarga(objeto, campo, destino, tipoCampo));
+    }
+
     // ---------- Objetos y arreglos dinámicos ----------
 
     /**

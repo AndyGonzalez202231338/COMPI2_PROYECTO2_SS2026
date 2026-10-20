@@ -74,8 +74,23 @@ public final class Binaria extends NodoZ implements ExpresionZ {
         // en vez de una suma aritmetica.
         if (operador.equals("+")
                 && (a.getTipo() == TipoPrimitivo.CADENA || b.getTipo() == TipoPrimitivo.CADENA)) {
+            // Si un lado no es cadena, convertirlo a cadena primero.
+            String lugarA = a.getLugar();
+            String lugarB = b.getLugar();
+            if (a.getTipo() != null && a.getTipo() != TipoPrimitivo.CADENA
+                    && !a.getTipo().esDesconocido()) {
+                String conv = generador.nuevoTemporal();
+                generador.emitirConversion(a.getTipo().nombre(), "cadena", lugarA, conv);
+                lugarA = conv;
+            }
+            if (b.getTipo() != null && b.getTipo() != TipoPrimitivo.CADENA
+                    && !b.getTipo().esDesconocido()) {
+                String conv = generador.nuevoTemporal();
+                generador.emitirConversion(b.getTipo().nombre(), "cadena", lugarB, conv);
+                lugarB = conv;
+            }
             String t = generador.nuevoTemporal();
-            generador.emitirConcat(a.getLugar(), b.getLugar(), t);
+            generador.emitirConcat(lugarA, lugarB, t);
             return ResultadoC3D.temporal(t, TipoPrimitivo.CADENA);
         }
 

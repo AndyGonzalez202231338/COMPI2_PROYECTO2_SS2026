@@ -346,7 +346,6 @@ public class ASTBuilderPigLatin extends GramaticaPigLatinBaseVisitor<NodoAST> {
         String tipoDeclarado = ctx.tipoDeclarado.getText();
         return DeclaracionVariable.objetoTipado(nombre, init, tipoDeclarado, linea(ctx), columna(ctx));
     }
-
     /** ESTO ID DOSPUNTOS expresion  (sin tipo explícito; se infiere del valor). */
     @Override
     public NodoAST visitDeclaracionVarSoloValor(GramaticaPigLatin.DeclaracionVarSoloValorContext ctx) {

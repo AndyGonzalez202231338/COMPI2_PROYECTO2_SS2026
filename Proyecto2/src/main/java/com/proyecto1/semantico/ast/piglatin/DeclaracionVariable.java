@@ -120,30 +120,29 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                 this.tipoCache = t;
                 break;
             case OBJETO_TIPADO:
-                // Resolver el tipo declarado (el ID despues del segundo ':')
-                Simbolo simTipoDeclarado = ambito.resolver(nombreTipoEstructura);
-                if (simTipoDeclarado == null) {
+                Simbolo simTipo = ambito.resolver(nombreTipoEstructura);
+                if (simTipo == null) {
                     errores.reportar(linea, columna,
                             "Tipo no encontrado: '" + nombreTipoEstructura + "'");
                     t = TipoPrimitivo.DESCONOCIDO;
-                } else if (simTipoDeclarado.getCategoria() == CategoriaSimbolo.CLASE) {
-                    t = new TipoClase(simTipoDeclarado);
-                } else if (simTipoDeclarado.getCategoria() == CategoriaSimbolo.ESTRUCTURA) {
-                    t = new TipoEstructura(simTipoDeclarado);
+                } else if (simTipo.getCategoria() == CategoriaSimbolo.CLASE) {
+                    t = new TipoClase(simTipo);
+                } else if (simTipo.getCategoria() == CategoriaSimbolo.ESTRUCTURA) {
+                    t = new TipoEstructura(simTipo);
                 } else {
                     errores.reportar(linea, columna,
                             "'" + nombreTipoEstructura + "' no es una clase ni estructura");
                     t = TipoPrimitivo.DESCONOCIDO;
                 }
                 this.tipoCache = t;
-                // Verificar el inicializador si no es null literal
                 if (inicializador != null) {
                     Tipo tipoInit = inicializador.verificar(ambito, errores);
-                    if (tipoInit != null && tipoInit != TipoPrimitivo.NULO
-                            && !Tipos.esAsignable(t, tipoInit)) {
+                    // Validación clave: el tipo del inicializador debe ser compatible
+                    // con el tipo declarado (identidad, subtipo, o null).
+                    if (tipoInit != null && !Tipos.esAsignable(t, tipoInit)) {
                         errores.reportar(linea, columna,
-                                "No se puede asignar " + tipoInit.nombre()
-                                        + " a variable de tipo " + t.nombre());
+                                "Tipo incompatible: '" + tipoInit.nombre()
+                                        + "' no es '" + t.nombre() + "'");
                     }
                 }
                 break;
@@ -265,8 +264,8 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
             }
             case OBJETO_TIPADO: {
                 if (inicializador != null) {
-                    ResultadoC3D v = inicializador.generarC3D(generador);
-                    generador.emitirAsignacion(v.getLugar(), destino);
+                    ResultadoC3D res = inicializador.generarC3D(generador);
+                    generador.emitirAsignacion(res.getLugar(), destino);
                 }
                 return ResultadoC3D.vacio();
             }
