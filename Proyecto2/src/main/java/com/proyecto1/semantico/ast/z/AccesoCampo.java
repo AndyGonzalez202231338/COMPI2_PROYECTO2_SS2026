@@ -64,7 +64,8 @@ public final class AccesoCampo extends NodoZ implements ExpresionZ {
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         ResultadoC3D base = objeto.generarC3D(generador);
         String t = generador.nuevoTemporal();
-        generador.emitirCargaCampo(base.getLugar(), campo, t);
+        String tipoCampoStr = (tipoCampo != null) ? tipoCampo.nombre() : null;
+        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr);
         Tipo tipo = (tipoCampo != null) ? tipoCampo : TipoPrimitivo.DESCONOCIDO;
         return ResultadoC3D.temporal(t, tipo);
     }

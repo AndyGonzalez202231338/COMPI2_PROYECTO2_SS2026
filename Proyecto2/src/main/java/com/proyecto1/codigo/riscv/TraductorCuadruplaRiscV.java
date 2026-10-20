@@ -517,6 +517,11 @@ public final class TraductorCuadruplaRiscV {
         int off = offsetDeCampo(q.campo(), sb);
         sb.append("    lw t2, ").append(off).append("(t1)\n");
         guardar("t2", q.destino(), sb);
+        // Si el campo es flotante, marcar el temporal para que las operaciones
+        // siguientes usen instrucciones float (fmul.s en vez de mul, etc.).
+        if ("flotante".equals(q.tipoCampo())) {
+            marcarFlotante(q.destino());
+        }
     }
 
     // objeto.campo = valor
@@ -943,8 +948,23 @@ public final class TraductorCuadruplaRiscV {
     private void cargarComoFloat(String op, String freg, boolean yaEsFloat, StringBuilder sb) {
         if (yaEsFloat) {
             cargarFloat(op, freg, sb);
+            return;
+        }
+        // Literal entero genuino (como "5"): convertir el VALOR a float.
+        if (esEnteroLiteral(op)) {
+            sb.append("    li t0, ").append(op).append("\n");
+            sb.append("    fcvt.s.w ").append(freg).append(", t0\n");
+            return;
+        }
+        // Variable/temporal en la pila: sus bits ya podrian ser IEEE 754
+        // (de un campo float o un parametro float). Usar flw para
+        // reinterpretar los bits como float, no fcvt.s.w que convertiria
+        // el valor entero.
+        if (frame.tiene(op)) {
+            sb.append("    flw ").append(freg).append(", ")
+                    .append(frame.offsetDe(op)).append("(fp)\n");
         } else {
-            cargar(op, "t0", sb);
+            sb.append("    li t0, 0\n");
             sb.append("    fcvt.s.w ").append(freg).append(", t0\n");
         }
     }

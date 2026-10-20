@@ -82,6 +82,27 @@ public final class Binaria extends NodoY implements ExpresionY {
         ResultadoC3D a = izquierdo.generarC3D(generador);
         ResultadoC3D b = derecho.generarC3D(generador);
 
+        if (operador.equals("+")
+                && (a.getTipo() == TipoPrimitivo.CADENA || b.getTipo() == TipoPrimitivo.CADENA)) {
+            String lugarA = a.getLugar();
+            String lugarB = b.getLugar();
+            if (a.getTipo() != null && a.getTipo() != TipoPrimitivo.CADENA
+                    && !a.getTipo().esDesconocido()) {
+                String conv = generador.nuevoTemporal();
+                generador.emitirConversion(a.getTipo().nombre(), "cadena", lugarA, conv);
+                lugarA = conv;
+            }
+            if (b.getTipo() != null && b.getTipo() != TipoPrimitivo.CADENA
+                    && !b.getTipo().esDesconocido()) {
+                String conv = generador.nuevoTemporal();
+                generador.emitirConversion(b.getTipo().nombre(), "cadena", lugarB, conv);
+                lugarB = conv;
+            }
+            String t = generador.nuevoTemporal();
+            generador.emitirConcat(lugarA, lugarB, t);
+            return ResultadoC3D.temporal(t, TipoPrimitivo.CADENA);
+        }
+
         //Que tipo de operacion binaria es (aritmetica o booleana)
         Tipo tipo;
         switch (operador) {
