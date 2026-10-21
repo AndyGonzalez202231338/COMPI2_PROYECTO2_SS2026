@@ -779,20 +779,19 @@ public final class TraductorCuadruplaRiscV {
 
         // Invertir los digitos (t6 = inicio, t3-1 = final)
         sb.append(reverse).append(":\n");
-        sb.append("    addi t3, t3, -1\n");
+        sb.append("    addi t0, t3, -1\n");          // t0 = puntero derecho (ultimo digito)
         sb.append(revLoop).append(":\n");
-        sb.append("    bge t6, t3, ").append(fin).append("\n");
-        sb.append("    lb t0, 0(t6)\n");
-        sb.append("    lb t1, 0(t3)\n");
-        sb.append("    sb t1, 0(t6)\n");
-        sb.append("    sb t0, 0(t3)\n");
+        sb.append("    bge t6, t0, ").append(fin).append("\n");
+        sb.append("    lb t1, 0(t6)\n");
+        sb.append("    lb t2, 0(t0)\n");
+        sb.append("    sb t2, 0(t6)\n");
+        sb.append("    sb t1, 0(t0)\n");
         sb.append("    addi t6, t6, 1\n");
-        sb.append("    addi t3, t3, -1\n");
+        sb.append("    addi t0, t0, -1\n");
         sb.append("    j ").append(revLoop).append("\n");
 
-        // Terminador y actualizar heap_ptr
+        // Terminador y actualizar heap_ptr. t3 nunca se toco durante el swap, asi que sigue apuntando correctamente al final de los digitos.
         sb.append(fin).append(":\n");
-        sb.append("    addi t3, t3, 1\n");
         sb.append("    sb zero, 0(t3)\n");
         sb.append("    addi t3, t3, 1\n");
         sb.append("    la t5, heap_ptr\n");
@@ -801,45 +800,40 @@ public final class TraductorCuadruplaRiscV {
         guardar("t4", q.destino(), sb);
     }
 
-    // flotante a cadena: convierte la parte entera con i2s, agrega '.', luego convierte
-    // 4 digitos decimales. Es una aproximacion, no precision completa.
+    // flotante a cadena: signo opcional + parte entera (mismo algoritmo corregido
+    // de emitirI2S) + '.' + 6 digitos decimales con ceros a la izquierda.
+    // Formato fijo de 6 decimales, igual al que usa el backend C (printf %f).
     private void emitirF2S(CuadruplaConversion q, StringBuilder sb) {
-        // Estrategia: truncar a entero, convertir esa parte con i2s manual,
-        // luego obtener la parte fraccionaria multiplicando por 10000, truncar
-        // y convertir esos 4 digitos.
-        // Por simplicidad: convertir a entero (fcvt.w.s) y usar i2s.
-        // Esto pierde los decimales, pero funciona para la mayoria de pruebas.
-        // Un f2s completo requiere ~100 instrucciones mas.
-        sb.append("    # f2s: aproximacion (parte entera + '.0')\n");
         cargarFloat(q.valor(), "ft0", sb);
-        sb.append("    fcvt.w.s t0, ft0, rtz\n");
 
-        // Guardar el entero truncado como temporal para reusar i2s
-        String tempEntero = "_f2s_tmp_" + contadorInterno;
-        if (!frame.tiene(tempEntero)) {
-            // No hay slot reservado; guardar en t0 y emitir i2s inline simplificado.
-            // Se reusa la logica de i2s directamente con t0 ya cargado.
-        }
-
-        // Reusar la misma logica que i2s pero con t0 ya puesto
+        // t4 = inicio de la cadena resultado (heap_ptr actual), t3 = cursor de escritura.
         sb.append("    la t5, heap_ptr\n");
         sb.append("    lw t4, 0(t5)\n");
         sb.append("    mv t3, t4\n");
 
         String noNeg = etiquetaInterna("f2s_noneg");
+
+        // Signo: se lee el bit 31 del float con fmv.x.w (mover los bits a un
+        // registro entero) en vez de comparar contra 0.0.
+        sb.append("    fmv.x.w t0, ft0\n");
+        sb.append("    bgez t0, ").append(noNeg).append("\n");
+        sb.append("    li t1, 45\n");               // '-'
+        sb.append("    sb t1, 0(t3)\n");
+        sb.append("    addi t3, t3, 1\n");
+        sb.append("    fneg.s ft0, ft0\n");          // trabajar con el valor absoluto
+        sb.append(noNeg).append(":\n");
+
+        // Parte entera: truncar hacia cero (ft0 ya es positivo aqui).
+        sb.append("    fcvt.w.s t0, ft0, rtz\n");
+
+        // --- Parte entera: mismo algoritmo que emitirI2S (ya corregido) ---
         String noCero = etiquetaInterna("f2s_nocero");
         String loop = etiquetaInterna("f2s_loop");
         String reverse = etiquetaInterna("f2s_rev");
         String revLoop = etiquetaInterna("f2s_revloop");
-        String fin = etiquetaInterna("f2s_fin");
+        String finEntero = etiquetaInterna("f2s_finentero");
 
-        sb.append("    bgez t0, ").append(noNeg).append("\n");
-        sb.append("    li t1, 45\n");
-        sb.append("    sb t1, 0(t3)\n");
-        sb.append("    addi t3, t3, 1\n");
-        sb.append("    neg t0, t0\n");
-        sb.append(noNeg).append(":\n");
-        sb.append("    mv t6, t3\n");
+        sb.append("    mv t6, t3\n");                // t6 = inicio de los digitos enteros
 
         sb.append("    bnez t0, ").append(noCero).append("\n");
         sb.append("    li t1, 48\n");
@@ -858,30 +852,64 @@ public final class TraductorCuadruplaRiscV {
         sb.append("    div t0, t0, t1\n");
         sb.append("    j ").append(loop).append("\n");
 
+        // Invertir los digitos (mismo fix que emitirI2S: t3 nunca se toca
+        // durante el swap, se usa t0 como puntero derecho independiente).
         sb.append(reverse).append(":\n");
-        sb.append("    addi t3, t3, -1\n");
+        sb.append("    addi t0, t3, -1\n");
         sb.append(revLoop).append(":\n");
-        sb.append("    bge t6, t3, ").append(fin).append("\n");
-        sb.append("    lb t0, 0(t6)\n");
-        sb.append("    lb t1, 0(t3)\n");
-        sb.append("    sb t1, 0(t6)\n");
-        sb.append("    sb t0, 0(t3)\n");
+        sb.append("    bge t6, t0, ").append(finEntero).append("\n");
+        sb.append("    lb t1, 0(t6)\n");
+        sb.append("    lb t2, 0(t0)\n");
+        sb.append("    sb t2, 0(t6)\n");
+        sb.append("    sb t1, 0(t0)\n");
         sb.append("    addi t6, t6, 1\n");
-        sb.append("    addi t3, t3, -1\n");
+        sb.append("    addi t0, t0, -1\n");
         sb.append("    j ").append(revLoop).append("\n");
+        sb.append(finEntero).append(":\n");
+        // t3 sigue apuntando correctamente al final de la parte entera.
 
-        sb.append(fin).append(":\n");
-        sb.append("    addi t3, t3, 1\n");
-        // Agregar ".0" al final (aproximacion)
-        sb.append("    li t1, 46\n");          // '.'
+        // --- Punto decimal ---
+        sb.append("    li t1, 46\n");                // '.'
         sb.append("    sb t1, 0(t3)\n");
-        sb.append("    li t1, 48\n");          // '0'
-        sb.append("    sb t1, 1(t3)\n");
-        sb.append("    sb zero, 2(t3)\n");     // terminador
-        sb.append("    addi t3, t3, 3\n");
+        sb.append("    addi t3, t3, 1\n");
 
+        // --- Parte fraccionaria: 6 digitos fijos, con ceros a la izquierda ---
+        // frac = ft0 - parte_entera(ft0), luego frac * 1e6 redondeado a entero.
+        sb.append("    fcvt.w.s t1, ft0, rtz\n");
+        sb.append("    fcvt.s.w ft1, t1\n");
+        sb.append("    fsub.s ft2, ft0, ft1\n");      // ft2 = parte fraccionaria, 0 <= ft2 < 1
+
+        sb.append("    li t1, 1000000\n");
+        sb.append("    fcvt.s.w ft1, t1\n");          // ft1 = 1000000.0
+        sb.append("    fmul.s ft2, ft2, ft1\n");
+        sb.append("    fcvt.w.s t0, ft2\n");          // t0 = fraccion * 1e6, redondeada
+
+        // Caso borde del redondeo (ej. 0.9999997 -> 1000000): recortar a 999999.
+        String noDesborde = etiquetaInterna("f2s_nodesborde");
+        sb.append("    li t1, 1000000\n");
+        sb.append("    blt t0, t1, ").append(noDesborde).append("\n");
+        sb.append("    li t0, 999999\n");
+        sb.append(noDesborde).append(":\n");
+
+        // 6 digitos de mas a menos significativo, dividiendo por potencias de 10
+        // decrecientes. No hace falta invertir nada con este metodo.
+        int[] potencias = {100000, 10000, 1000, 100, 10, 1};
+        for (int pot : potencias) {
+            sb.append("    li t1, ").append(pot).append("\n");
+            sb.append("    div t2, t0, t1\n");
+            sb.append("    li t1, 10\n");
+            sb.append("    rem t2, t2, t1\n");
+            sb.append("    addi t2, t2, 48\n");
+            sb.append("    sb t2, 0(t3)\n");
+            sb.append("    addi t3, t3, 1\n");
+        }
+
+        // Terminador y actualizar heap_ptr.
+        sb.append("    sb zero, 0(t3)\n");
+        sb.append("    addi t3, t3, 1\n");
         sb.append("    la t5, heap_ptr\n");
         sb.append("    sw t3, 0(t5)\n");
+
         guardar("t4", q.destino(), sb);
     }
 
@@ -950,19 +978,20 @@ public final class TraductorCuadruplaRiscV {
             cargarFloat(op, freg, sb);
             return;
         }
-        // Literal entero genuino (como "5"): convertir el VALOR a float.
+        // yaEsFloat == false significa que el operando es un ENTERO genuino
+        // (literal o variable/temporal entera), nunca bits float reinterpretados.
+        // Siempre hay que convertir el VALOR con fcvt.s.w, nunca usar flw aqui:
+        // flw tomaria los bits del entero (ej. 3 = 0x00000003) y los
+        // reinterpretaria como float (un numero denormalizado casi 0), dando
+        // resultados incorrectos en operaciones mixtas como "n + a".
         if (esEnteroLiteral(op)) {
             sb.append("    li t0, ").append(op).append("\n");
             sb.append("    fcvt.s.w ").append(freg).append(", t0\n");
             return;
         }
-        // Variable/temporal en la pila: sus bits ya podrian ser IEEE 754
-        // (de un campo float o un parametro float). Usar flw para
-        // reinterpretar los bits como float, no fcvt.s.w que convertiria
-        // el valor entero.
         if (frame.tiene(op)) {
-            sb.append("    flw ").append(freg).append(", ")
-                    .append(frame.offsetDe(op)).append("(fp)\n");
+            sb.append("    lw t0, ").append(frame.offsetDe(op)).append("(fp)\n");
+            sb.append("    fcvt.s.w ").append(freg).append(", t0\n");
         } else {
             sb.append("    li t0, 0\n");
             sb.append("    fcvt.s.w ").append(freg).append(", t0\n");

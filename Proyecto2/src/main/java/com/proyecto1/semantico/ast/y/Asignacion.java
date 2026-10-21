@@ -31,6 +31,10 @@ public final class Asignacion extends NodoY implements InstruccionY {
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
+        if (objetivo instanceof Identificador id) {
+            Simbolo s = ambito.resolver(id.getNombre());
+            if (s != null) s.marcarInicializado();
+        }
         Tipo tIzq = objetivo.verificar(ambito, errores);
         if (valor instanceof Leer lectura) lectura.setTipoEsperado(tIzq);
         Tipo tDer = valor.verificar(ambito, errores);
@@ -40,11 +44,6 @@ public final class Asignacion extends NodoY implements InstruccionY {
                     "No se puede asignar " + tDer.nombre() + " a " + tIzq.nombre());
         }
 
-        // Marcar inicializado solo si es variable simple (identificador).
-        if (objetivo instanceof Identificador id) {
-            Simbolo s = ambito.resolver(id.getNombre());
-            if (s != null) s.marcarInicializado();
-        }
         return tIzq;
     }
 

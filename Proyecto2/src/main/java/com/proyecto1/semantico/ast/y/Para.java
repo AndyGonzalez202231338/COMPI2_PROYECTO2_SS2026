@@ -15,6 +15,7 @@ public final class Para extends NodoY implements InstruccionY {
     private final ExpresionY condicion;
     private final InstruccionY actualizacion;
     private final Bloque cuerpo;
+    private Ambito ambitoCiclo;
 
     public Para(InstruccionY inicializacion, ExpresionY condicion, InstruccionY actualizacion,
                 Bloque cuerpo, int linea, int columna) {
@@ -30,10 +31,10 @@ public final class Para extends NodoY implements InstruccionY {
     public InstruccionY getActualizacion() { return actualizacion; }
     public Bloque getCuerpo() { return cuerpo; }
 
-    @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         // El "para" introduce su propio ámbito (la variable de init vive solo ahí)
         AmbitoBloque ambCiclo = new AmbitoBloque(ambito, true); // esCiclo = true
+        this.ambitoCiclo = ambCiclo;
 
         if (inicializacion != null) inicializacion.verificar(ambCiclo, errores);
 
@@ -73,6 +74,10 @@ public final class Para extends NodoY implements InstruccionY {
      */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
+        Ambito ambitoAnterior = null;
+        if (ambitoCiclo != null) {
+            ambitoAnterior = generador.entrarAmbito(ambitoCiclo);
+        }
         //para (entero i = 0; i < 3; i++):
         // L0
         String inicio = generador.nuevaEtiqueta();
@@ -124,6 +129,10 @@ public final class Para extends NodoY implements InstruccionY {
         // Se emite la etiqueta de salida donde aterriza el "if_false" (o un "break").
         // Cuádrupla generada "L2:"
         generador.emitirEtiqueta(fin);
+
+        if (ambitoAnterior != null) {
+            generador.salirAmbito(ambitoAnterior);
+        }
 
         return ResultadoC3D.vacio();
     }

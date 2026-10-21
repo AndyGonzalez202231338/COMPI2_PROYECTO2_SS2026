@@ -50,38 +50,39 @@ public final class HacerMientras extends NodoY implements InstruccionY {
      */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
-        /*
-            entero i = 0
-                mientras (i < 3) hacer
-                    i++
-         */
-        // Se crea y se emite la etiqueta donde inicia cada iteración.
-        // Cuádrupla generada "L0:"
+    /*
+        entero i = 0
+        hacer:
+            i++
+        mientras(i < 3)
+    */
+        // L_inicio: donde arranca cada repeticion del cuerpo.
         String inicio = generador.nuevaEtiqueta();
-        generador.emitirEtiqueta(inicio);
-        // Se genera el código de la condición ANTES de entrar al cuerpo.
-        // Cuádrupla generada -> "3: t0 = i < 3"
-        ResultadoC3D c = condicion.generarC3D(generador);
-        // Se crea la etiqueta a la que saltaremos cuando el ciclo termine,
-        // pero aún no la emitimos, solo la reservamos.
+        // L_cond: donde "continuar" salta a evaluar la condicion (asi el cuerpo
+        // SIEMPRE corre al menos una vez, aunque la condicion sea falsa desde
+        // el principio).
+        String cond = generador.nuevaEtiqueta();
+        // L_fin: donde aterriza "romper", o el salto cuando la condicion resulta falsa.
         String fin = generador.nuevaEtiqueta();
-        // Si la condición evaluada arriba es FALSA, el ciclo se rompe y salta a la etiqueta 'fin'.
-        // Cuádrupla generada "if_false t0 goto L1"
-        generador.emitirIfFalse(c.getLugar(), fin);
 
-        // Se le avisa al generador en qué ciclo estamos.
-        // - Si el usuario usa 'continue', el generador sabrá que debe saltar a 'inicio' (L0).
-        // - Si el usuario usa 'break', el generador sabrá que debe saltar a 'fin' (L1).
-        generador.entrarCiclo(inicio, fin);
-        // Se generan las instrucciones de lo que hay dentro del while.
+        // Cuádrupla generada "L0:"
+        generador.emitirEtiqueta(inicio);
+
+        // "continuar" salta a L_cond (evalua la condicion sin saltarse nada del
+        // cuerpo que ya corrio); "romper" salta a L_fin.
+        generador.entrarCiclo(cond, fin);
         cuerpo.generarC3D(generador);
-        // Limpiamos el entorno porque ya salimos del bloque del ciclo.
         generador.salirCiclo();
-        // Una vez terminado el cuerpo, debemos volver incondicionalmente arriba a evaluar la condición.
-        // Cuádrupla generada  "goto L0"
-        generador.emitirGoto(inicio);
-        // Aquí aterrizará el programa cuando la instrucción "if_false" se cumpla o si hubo un "break".
-        // Cuádrupla generada "L1:"
+
+        // Cuádrupla generada "L_cond:"
+        generador.emitirEtiqueta(cond);
+        // Cuádrupla generada "t0 = i < 3"
+        ResultadoC3D c = condicion.generarC3D(generador);
+        // Si la condicion es VERDADERA, se repite el cuerpo.
+        // Cuádrupla generada "if_true t0 goto L0"
+        generador.emitirIfTrue(c.getLugar(), inicio);
+
+        // Cuádrupla generada "L_fin:"
         generador.emitirEtiqueta(fin);
 
         return ResultadoC3D.vacio();
