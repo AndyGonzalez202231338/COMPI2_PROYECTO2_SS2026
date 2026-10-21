@@ -23,7 +23,10 @@ public final class Tipos {
         // null solo es asignable a tipos compuestos o arreglos (nunca a primitivos).
         //if (origen == TipoPrimitivo.NULO && (destino.esCompuesto() || destino.esArreglo())) return true;
 
-        if (origen == TipoPrimitivo.NULO) return true;   // lenguaje propio: null asignable a cualquier tipo
+        // null solo es asignable a tipos compuestos (clases, estructuras) y arreglos.
+        if (origen == TipoPrimitivo.NULO) {
+            return destino.esCompuesto() || destino instanceof TipoArreglo;
+        }
 
         // Herencia: un objeto de la subclase se puede guardar donde se espera la
         // superclase (Animal a = new Perro()). Al reves no: falta un cast.

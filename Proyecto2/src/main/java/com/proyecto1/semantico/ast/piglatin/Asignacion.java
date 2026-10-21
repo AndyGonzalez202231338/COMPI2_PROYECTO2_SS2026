@@ -47,6 +47,10 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
+        if (operador.equals("=") && objetivo instanceof Identificador id) {
+            Simbolo s = ambito.resolver(id.getNombre());
+            if (s != null) s.marcarInicializado();
+        }
         Tipo tIzq = objetivo.verificar(ambito, errores);
         this.tipoLValueCache = tIzq;
 
@@ -96,11 +100,6 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
         } else if (!Tipos.esAsignable(tIzq, tDer)) {
             errores.reportar(linea, columna,
                     "No se puede asignar " + tDer.nombre() + " a " + tIzq.nombre());
-        }
-
-        if (objetivo instanceof Identificador id) {
-            Simbolo s = ambito.resolver(id.getNombre());
-            if (s != null) s.marcarInicializado();
         }
         return tIzq;
     }
