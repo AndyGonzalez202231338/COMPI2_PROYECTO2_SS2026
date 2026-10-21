@@ -914,8 +914,14 @@ public final class TraductorCuadruplaRiscV {
     }
 
     // Genera una etiqueta interna unica para bucles dentro de una cuadrupla.
+    // Se incluye nombreFuncion ademas de prefijoEtiquetas (que es el nombre del
+    // ARCHIVO, igual para todas las funciones de ese archivo) porque esta clase
+    // se crea de nuevo por cada funcion y su contadorInterno siempre arranca en 0:
+    // sin el nombre de la funcion, dos funciones distintas del MISMO archivo que
+    // ambas usen concat/i2s/etc. generarian etiquetas identicas (ej. "archivo_y__i2s_0"
+    // repetida en cada funcion), y el ensamblador las rechaza como duplicadas.
     private String etiquetaInterna(String prefijo) {
-        return prefijoEtiquetas + "_" + prefijo + "_" + (contadorInterno++);
+        return prefijoEtiquetas + nombreFuncion + "_" + prefijo + "_" + (contadorInterno++);
     }
 
     // ===============================================================
@@ -936,7 +942,7 @@ public final class TraductorCuadruplaRiscV {
     }
 
     // Marcar un temporal/variable como flotante para futuras consultas.
-    private void marcarFlotante(String nombre) {
+    public void marcarFlotante(String nombre) {
         if (nombre != null) temporalesFlotantes.add(nombre);
     }
 

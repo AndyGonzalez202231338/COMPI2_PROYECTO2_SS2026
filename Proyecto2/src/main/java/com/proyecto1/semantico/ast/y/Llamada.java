@@ -70,12 +70,26 @@ public final class Llamada extends NodoY implements ExpresionY {
                     "Llamada a " + objetivo.getClass().getSimpleName() + ": pendiente en C3D");
         }
 
-        //    Cada argumento se evalúa y se apila con un "param" EN ORDEN.
-        //    El orden importa: en C3D los efectos laterales (llamadas anidadas, leer(),
-        //    x++) deben ejecutarse en el orden del código fuente.
+        //    PRIMERO se evaluan TODOS los argumentos, en orden (el orden importa:
+        //    en C3D los efectos laterales -- llamadas anidadas, leer(), x++ -- deben
+        //    ejecutarse en el orden del codigo fuente), SIN emitir "param" todavia.
+        //    Si se emitiera "param" justo tras evaluar cada argumento, un argumento
+        //    que es EL MISMO una llamada (ej. "sumar(sumar(1,2), sumar(3,4))") haria
+        //    que el "param" de la llamada EXTERNA quedara pendiente justo antes de
+        //    evaluar el SIGUIENTE argumento, y los "param" de esa llamada INTERNA se
+        //    mezclarian con el pendiente, haciendo que el backend agrupe argumentos
+        //    de DOS llamadas distintas como si fueran de una sola.
+        java.util.List<String> lugaresArgs = new java.util.ArrayList<>();
         for (ExpresionY a : argumentos) {
             ResultadoC3D va = a.generarC3D(generador);
-            generador.emitirParam(va.getLugar());
+            lugaresArgs.add(va.getLugar());
+        }
+
+        //    SOLO AHORA, con todos los argumentos ya evaluados (y cualquier llamada
+        //    anidada ya completamente resuelta), se emiten los "param" de ESTA
+        //    llamada, seguidos de su propio "call".
+        for (String lugar : lugaresArgs) {
+            generador.emitirParam(lugar);
         }
 
         //    La llamada en sí. El nombre real de la función lo lleva el identificador;

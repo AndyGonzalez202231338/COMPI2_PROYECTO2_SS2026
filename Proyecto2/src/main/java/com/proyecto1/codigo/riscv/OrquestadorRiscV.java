@@ -2,6 +2,7 @@ package com.proyecto1.codigo.riscv;
 
 import com.proyecto1.semantico.ast.GeneradorC3D;
 import com.proyecto1.semantico.ast.cuadruplas.*;
+import com.proyecto1.semantico.tipos.TipoPrimitivo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -159,6 +160,8 @@ public final class OrquestadorRiscV {
         TraductorCuadruplaRiscV traductor =
                 new TraductorCuadruplaRiscV(frame, nombre, cadenas, fc.unidad().nombre(), layoutHeap);
 
+        marcarParametrosFlotantes(traductor, fc.unidad(), nombre);
+
         int tam = frame.tamanoBytes();
         int nParams = params.size();
 
@@ -291,5 +294,19 @@ public final class OrquestadorRiscV {
             }
         }
         return resultado;
+    }
+
+    // Recorre la firma de la funcion y marca en el traductor cada parametro
+    // cuyo tipo sea flotante, para que las cuadruplas que lo usan por primera
+    // vez (antes de calcular nada con el) ya sepan tratarlo como float.
+    private void marcarParametrosFlotantes(TraductorCuadruplaRiscV traductor,
+                                           UnidadRiscV unidad, String nombreFuncion) {
+        GeneradorC3D.Firma firma = unidad.firmas().get(nombreFuncion);
+        if (firma == null || firma.parametros() == null) return;
+        for (GeneradorC3D.ParametroFirma p : firma.parametros()) {
+            if (p.tipo() == TipoPrimitivo.FLOTANTE) {
+                traductor.marcarFlotante(p.nombre());
+            }
+        }
     }
 }

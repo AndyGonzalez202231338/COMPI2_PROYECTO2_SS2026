@@ -3,6 +3,7 @@ package com.proyecto1.semantico;
 
 import com.proyecto1.semantico.ast.y.Estructura;
 import com.proyecto1.semantico.ast.y.Funcion;
+import com.proyecto1.semantico.ast.y.Parametro;
 import com.proyecto1.semantico.ast.y.Programa;
 import com.proyecto1.semantico.errores.ManejadorErrores;
 import com.proyecto1.semantico.tabla.AmbitoGlobal;
@@ -43,6 +44,20 @@ public class AnalizadorSemanticoY {
 
             Simbolo s = new Simbolo(f.getNombre(), CategoriaSimbolo.FUNCION,
                     tRet, f.getLinea(), f.getColumna());
+
+            // Registrar tambien los PARAMETROS aqui, en la primera pasada, no en
+            // Funcion.verificar(). Si se dejaran para la segunda pasada, una
+            // funcion que llama a otra declarada MAS ABAJO (recursion mutua,
+            // ej. esPar/esImpar) veria esa otra funcion con la lista de
+            // parametros todavia vacia, porque a esa otra funcion aun no le
+            // toca su turno de verificar().
+            for (Parametro p : f.getParametros()) {
+                Tipo tp = p.resolverTipo(global, errores);
+                Simbolo sp = new Simbolo(p.getNombre(), CategoriaSimbolo.PARAMETRO, tp,
+                        p.getLinea(), p.getColumna());
+                s.agregarParametro(sp);
+            }
+
             if (!global.declarar(s)) {
                 errores.reportar(f.getLinea(), f.getColumna(),
                         "Función duplicada: '" + f.getNombre() + "'");
