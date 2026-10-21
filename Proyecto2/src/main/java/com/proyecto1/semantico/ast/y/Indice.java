@@ -10,6 +10,9 @@ import com.proyecto1.semantico.tipos.TipoArreglo;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
 import com.proyecto1.semantico.tipos.Tipos;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class Indice extends NodoY implements ExpresionY {
 
     private final ExpresionY arreglo;
@@ -44,40 +47,64 @@ public final class Indice extends NodoY implements ExpresionY {
         }
 
         tipoElemento = ta.getBase();
-
-        if (arreglo instanceof Identificador idArr
-                && indice instanceof Literal litIdx
-                && litIdx.getCategoria() == CategoriaLiteral.ENTERO) {
-
-            Simbolo sArr = ambito.resolver(idArr.getNombre());
-            if (sArr != null && sArr.esArregloDeTamanoFijo()) {
-                int idx = ((Long) litIdx.getValor()).intValue();
-                int size = sArr.getTamanosArreglo().get(0);
-                if (idx < 0 || idx >= size) {
-                    errores.reportar(indice.getLinea(), indice.getColumna(),
-                            "Índice " + idx + " fuera de rango (tamaño " + size + ")");
-                }
-            }
-        }
-
         return tipoElemento;
     }
 
-    /**
-     * Emite: C3D del arreglo, C3D del índice, y UNA cuádrupla (=[], base, idx, t).
-     * Devuel ResultadoC3D.temporal(t, tipoElemento).
-     *
-     * En Y los arreglos son de tamaño fijo y no hay ramificación flat/jagged:
-     * la composición directa (una cuádrupla por índice) cubre todos los casos,
-     * porque el lenguaje no tiene arreglos dinámicos con dimensiones runtime.
-     */
+    // ========== AYUDANTES PARA APLANAMIENTO (FLATTENING) ==========
+
+    public ExpresionY getBaseArray() {
+        if (arreglo instanceof Indice parent) return parent.getBaseArray();
+        return arreglo;
+    }
+
+    public List<ExpresionY> getIndices() {
+        if (arreglo instanceof Indice parent) {
+            List<ExpresionY> list = new ArrayList<>(parent.getIndices());
+            list.add(indice);
+            return list;
+        }
+        return List.of(indice);
+    }
+
+    // Genera la expresión C3D para el índice plano: i * dim2 + j
+    public ResultadoC3D generarIndicePlano(GeneradorC3D generador) {
+        List<ExpresionY> indices = getIndices();
+        List<String> temps = new ArrayList<>();
+        for (ExpresionY idxExpr : indices) {
+            temps.add(idxExpr.generarC3D(generador).getLugar());
+        }
+
+        String flat = temps.get(0);
+        Simbolo sim = null;
+        ExpresionY baseArr = getBaseArray();
+        if (baseArr instanceof Identificador id && generador.getAmbito() != null) {
+            sim = generador.getAmbito().resolver(id.getNombre());
+        }
+
+        if (sim != null && sim.getTamanosArreglo().size() > 1) {
+            List<Integer> dims = sim.getTamanosArreglo();
+            for (int i = 1; i < temps.size(); i++) {
+                String tMul = generador.nuevoTemporal();
+                generador.emitirBinaria("*", flat, String.valueOf(dims.get(i)), tMul);
+                String tAdd = generador.nuevoTemporal();
+                generador.emitirBinaria("+", tMul, temps.get(i), tAdd);
+                flat = tAdd;
+            }
+        }
+        return ResultadoC3D.temporal(flat, TipoPrimitivo.ENTERO);
+    }
+
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
-        ResultadoC3D base = arreglo.generarC3D(generador);
-        ResultadoC3D idx  = indice.generarC3D(generador);
+        ResultadoC3D base = getBaseArray().generarC3D(generador);
+        ResultadoC3D idxPlano = generarIndicePlano(generador);
         String t = generador.nuevoTemporal();
-        generador.emitirCargaIndice(base.getLugar(), idx.getLugar(), t);
+        generador.emitirCargaIndice(base.getLugar(), idxPlano.getLugar(), t);
         Tipo tipo = (tipoElemento != null) ? tipoElemento : TipoPrimitivo.DESCONOCIDO;
         return ResultadoC3D.temporal(t, tipo);
+    }
+
+    public void setTipoElemento(Tipo tipoElemento) {
+        this.tipoElemento = tipoElemento;
     }
 }

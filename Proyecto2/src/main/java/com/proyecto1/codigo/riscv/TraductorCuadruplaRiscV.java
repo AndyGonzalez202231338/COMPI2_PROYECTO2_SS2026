@@ -54,6 +54,9 @@ public final class TraductorCuadruplaRiscV {
     // cargar con flw/fsw o con lw/sw.
     private final java.util.Set<String> temporalesFlotantes = new java.util.HashSet<>();
 
+    // Arreglos que viven dentro de una estructura (no tienen longitud oculta)
+    private final java.util.Set<String> temporalesArreglosInline = new java.util.HashSet<>();
+
     // Contador para etiquetas internas unicas (bucles de concat, strcmp, i2s, etc.).
     private int contadorInterno = 0;
 
@@ -508,13 +511,20 @@ public final class TraductorCuadruplaRiscV {
     private void traducirCampoCarga(CuadruplaCampoCarga q, StringBuilder sb) {
         cargar(q.objeto(), "t1", sb);
         int off = offsetDeCampo(q.campo(), sb);
-        sb.append("    lw t2, ").append(off).append("(t1)\n");
-        guardar("t2", q.destino(), sb);
-        // Si el campo es flotante, marcar el temporal para que las operaciones
-        // siguientes usen instrucciones float (fmul.s en vez de mul, etc.).
-        if ("flotante".equals(q.tipoCampo())) {
-            marcarFlotante(q.destino());
+
+        String t = q.tipoCampo();
+        if (t != null && t.endsWith("[]")) {
+            // Si es un arreglo dentro de un struct, devolvemos su DIRECCION base.
+            sb.append("    addi t2, t1, ").append(off).append("\n");
+            temporalesArreglosInline.add(q.destino()); // <-- Lo registramos como inline
+        } else {
+            // Si es un campo normal, cargamos su valor.
+            sb.append("    lw t2, ").append(off).append("(t1)\n");
+            if ("flotante".equals(t)) {
+                marcarFlotante(q.destino());
+            }
         }
+        guardar("t2", q.destino(), sb);
     }
 
     // objeto.campo = valor
@@ -545,15 +555,19 @@ public final class TraductorCuadruplaRiscV {
         }
         return off;
     }
-
     // destino = arreglo[indice]
     //     t1 = direccion base del arreglo
     //     t2 = indice
-    //     direccion del elemento = base + (indice + 1) * 4
+    //     direccion del elemento = base + (indice + 1) * 4  (si es arreglo dinámico)
+    //                             = base + indice * 4      (si es arreglo inline en struct)
     private void traducirIndiceCarga(CuadruplaIndiceCarga q, StringBuilder sb) {
         cargar(q.arreglo(), "t1", sb);
         cargar(q.indice(), "t2", sb);
-        emitirDireccionElemento(sb);                // deja la direccion en t1
+
+        // Verificamos si es un arreglo dentro de una estructura (sin longitud oculta)
+        boolean esInline = temporalesArreglosInline.contains(q.arreglo());
+
+        emitirDireccionElemento(sb, esInline);      // deja la direccion en t1
         sb.append("    lw t2, 0(t1)\n");
         guardar("t2", q.destino(), sb);
     }
@@ -563,14 +577,21 @@ public final class TraductorCuadruplaRiscV {
         cargar(q.arreglo(), "t1", sb);
         cargar(q.indice(), "t2", sb);
         cargar(q.valor(), "t4", sb);                // t4 porque t0..t3 se usan abajo
-        emitirDireccionElemento(sb);                // deja la direccion en t1
+
+        // Verificamos si es un arreglo dentro de una estructura (sin longitud oculta)
+        boolean esInline = temporalesArreglosInline.contains(q.arreglo());
+
+        emitirDireccionElemento(sb, esInline);      // deja la direccion en t1
         sb.append("    sw t4, 0(t1)\n");
     }
 
     // Calcula la direccion del elemento de un arreglo y la deja en t1.
-    // Espera la base en t1 y el indice en t2. El +1 salta la palabra de la longitud.
-    private void emitirDireccionElemento(StringBuilder sb) {
-        sb.append("    addi t2, t2, 1\n");         // saltar la longitud
+    // Espera la base en t1 y el indice en t2.
+    // El +1 salta la palabra de la longitud SOLO si es un arreglo dinámico (new).
+    private void emitirDireccionElemento(StringBuilder sb, boolean esInline) {
+        if (!esInline) {
+            sb.append("    addi t2, t2, 1\n");     // saltar la longitud (solo dinámicos)
+        }
         sb.append("    slli t2, t2, 2\n");         // elementos de 4 bytes
         sb.append("    add t1, t1, t2\n");         // base + desplazamiento
     }

@@ -58,7 +58,6 @@ public final class LayoutHeap {
 
     private void registrarTipo(Simbolo s) {
         if (s.getCategoria() == CategoriaSimbolo.CLASE) {
-            // _class_id ocupa la palabra 0; los atributos vienen despues.
             offsets.put(clave(s.getNombre(), CAMPO_CLASS_ID), 0);
             for (Simbolo atributo : s.getAtributosConHerencia()) {
                 if (atributo.getOffset() >= 0) {
@@ -70,13 +69,28 @@ public final class LayoutHeap {
                 tamanos.put(s.getNombre(), s.getTamanoObjeto() * BYTES_POR_PALABRA);
             }
         } else if (s.getCategoria() == CategoriaSimbolo.ESTRUCTURA) {
+            int maxOffset = 0; // <-- NUEVO: Calcular tamaño basado en el campo más grande
             for (Simbolo campo : s.getMiembrosEnOrden()) {
                 if (campo.getCategoria() == CategoriaSimbolo.CAMPO && campo.getOffset() >= 0) {
                     offsets.put(clave(s.getNombre(), campo.getNombre()),
                             campo.getOffset() * BYTES_POR_PALABRA);
+
+                    // Calcular cuánto ocupa este campo (con sus arreglos)
+                    int size = 4;
+                    if (!campo.getTamanosArreglo().isEmpty()) {
+                        int totalElems = 1;
+                        for (int dim : campo.getTamanosArreglo()) totalElems *= dim;
+                        size = totalElems * 4;
+                    }
+                    int finDelCampo = (campo.getOffset() * BYTES_POR_PALABRA) + size;
+                    if (finDelCampo > maxOffset) {
+                        maxOffset = finDelCampo;
+                    }
                 }
             }
-            if (s.getTamanoObjeto() > 0) {
+            if (maxOffset > 0) {
+                tamanos.put(s.getNombre(), maxOffset); //Se guarda el tamaño correcto
+            } else if (s.getTamanoObjeto() > 0) {
                 tamanos.put(s.getNombre(), s.getTamanoObjeto() * BYTES_POR_PALABRA);
             }
         }

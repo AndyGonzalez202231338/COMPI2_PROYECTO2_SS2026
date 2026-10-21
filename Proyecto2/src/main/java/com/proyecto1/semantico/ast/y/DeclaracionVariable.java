@@ -19,8 +19,8 @@ public final class DeclaracionVariable extends NodoY implements InstruccionY {
 
     private final NodoTipoRef tipo;
     private final String nombre;
-    private final List<Integer> tamanosArreglo; // vacío si no es arreglo
-    private final ExpresionY inicializador;      // null si no hay "= expresion"
+    private final List<Integer> tamanosArreglo;
+    private final ExpresionY inicializador;
     private Tipo tipoCacheado;
 
     public DeclaracionVariable(NodoTipoRef tipo, String nombre, List<Integer> tamanosArreglo,
@@ -42,11 +42,10 @@ public final class DeclaracionVariable extends NodoY implements InstruccionY {
         Tipo t = tipo.resolver(ambito, errores);
         this.tipoCacheado = t;
 
-        // Si es arreglo, envolver en TipoArreglo (un nivel, según Y?)
         if (!tamanosArreglo.isEmpty()) {
-            if (tamanosArreglo.size() > 1)
-                errores.reportar(linea, columna, "Y? solo admite arreglos de un nivel");
-            t = new TipoArreglo(t, tamanosArreglo.get(0));   // <-- longitud
+            for (int i = tamanosArreglo.size() - 1; i >= 0; i--) {
+                t = new TipoArreglo(t, tamanosArreglo.get(i));
+            }
         }
 
         Simbolo s = new Simbolo(nombre, CategoriaSimbolo.VARIABLE, t, linea, columna);
@@ -61,28 +60,8 @@ public final class DeclaracionVariable extends NodoY implements InstruccionY {
             if (inicializador instanceof Leer lectura) lectura.setTipoEsperado(t);
 
             if (t instanceof TipoEstructura te && inicializador instanceof ListaLiteral lista) {
-                // CAMBIO CLAVE AQUI: Usar getMiembrosEnOrden() en lugar de getMiembros().valores()
-                List<Simbolo> campos = te.getDefinicion().getMiembrosEnOrden();
-                List<ExpresionY> valores = lista.getElementos();
-
-                if (campos.size() != valores.size()) {
-                    errores.reportar(linea, columna,
-                            "La estructura '" + te.nombre() + "' espera " + campos.size() +
-                                    " valores, se recibieron " + valores.size());
-                } else {
-                    for (int i = 0; i < valores.size(); i++) {
-                        Tipo tVal = valores.get(i).verificar(ambito, errores);
-                        Tipo tCampo = campos.get(i).getTipo();
-                        if (!Tipos.esAsignable(tCampo, tVal)) {
-                            errores.reportar(valores.get(i).getLinea(), valores.get(i).getColumna(),
-                                    "Campo " + (i + 1) + " ('" + campos.get(i).getNombre() +
-                                            "') espera " + tCampo.nombre() + ", se recibió " + tVal.nombre());
-                        }
-                    }
-                }
-            }
-            // CASO NORMAL: primitivos, arreglos, variables, etc.
-            else {
+                validarCamposEstructura(te, lista.getElementos(), ambito, errores, linea, columna);
+            } else {
                 Tipo tInit = inicializador.verificar(ambito, errores);
                 if (!Tipos.esAsignable(t, tInit))
                     errores.reportar(linea, columna,
@@ -97,9 +76,37 @@ public final class DeclaracionVariable extends NodoY implements InstruccionY {
         return TipoPrimitivo.VOID;
     }
 
+    private void validarCamposEstructura(TipoEstructura te, List<ExpresionY> valores, Ambito ambito, ManejadorErrores errores, int linea, int columna) {
+        List<Simbolo> campos = te.getDefinicion().getMiembrosEnOrden();
+
+        if (campos.size() != valores.size()) {
+            errores.reportar(linea, columna,
+                    "La estructura '" + te.nombre() + "' espera " + campos.size() +
+                            " valores, se recibieron " + valores.size());
+            return;
+        }
+
+        for (int i = 0; i < valores.size(); i++) {
+            Simbolo campoActual = campos.get(i);
+            ExpresionY valorActual = valores.get(i);
+            Tipo tCampo = campoActual.getTipo();
+
+            if (tCampo instanceof TipoEstructura subEstructura && valorActual instanceof ListaLiteral subLista) {
+                validarCamposEstructura(subEstructura, subLista.getElementos(), ambito, errores,
+                        valorActual.getLinea(), valorActual.getColumna());
+            } else {
+                Tipo tVal = valorActual.verificar(ambito, errores);
+                if (!Tipos.esAsignable(tCampo, tVal)) {
+                    errores.reportar(valorActual.getLinea(), valorActual.getColumna(),
+                            "Campo " + (i + 1) + " ('" + campoActual.getNombre() +
+                                    "') espera " + tCampo.nombre() + ", se recibió " + tVal.nombre());
+                }
+            }
+        }
+    }
+
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
-        // ---------- Caso arreglo ----------
         if (!tamanosArreglo.isEmpty()) {
             String dest = nombre;
             Ambito amb = generador.getAmbito();
@@ -108,14 +115,18 @@ public final class DeclaracionVariable extends NodoY implements InstruccionY {
                 if (sv != null) dest = sv.getNombreC3D();
             }
 
-            int tamano = tamanosArreglo.get(0);
-            String descriptorTipo = "entero"; // fallback
+            int totalElementos = 1;
+            for (int tam : tamanosArreglo) {
+                totalElementos *= tam;
+            }
+
+            String descriptorTipo = "entero";
             if (tipoCacheado instanceof TipoArreglo ta) {
-                descriptorTipo = ta.getBase().nombre();
+                descriptorTipo = ta.baseEscalar().nombre();
             } else if (tipoCacheado != null) {
                 descriptorTipo = tipoCacheado.nombre();
             }
-            generador.emitirNewArray(descriptorTipo, String.valueOf(tamano), dest);
+            generador.emitirNewArray(descriptorTipo, String.valueOf(totalElementos), dest);
 
             if (inicializador instanceof ListaLiteral lit) {
                 List<ExpresionY> elems = lit.getElementos();
@@ -127,7 +138,6 @@ public final class DeclaracionVariable extends NodoY implements InstruccionY {
             return ResultadoC3D.vacio();
         }
 
-        // ---------- Caso variable escalar ----------
         String dest = nombre;
         Ambito amb = generador.getAmbito();
         if (amb != null) {
@@ -135,30 +145,53 @@ public final class DeclaracionVariable extends NodoY implements InstruccionY {
             if (sv != null) dest = sv.getNombreC3D();
         }
 
-        // --- CORRECCIÓN: Si es estructura, reservar en el HEAP ---
         if (tipoCacheado instanceof TipoEstructura te) {
-            // 1. Reservar memoria para la estructura en el heap (malloc)
             generador.emitirNew(te.nombre(), dest);
 
-            // 2. Si hay inicializador, asignar campo por campo usando emitirGuardarCampo
-            if (inicializador instanceof ListaLiteral lista) {
-                List<Simbolo> campos = te.getDefinicion().getMiembrosEnOrden();
-                List<ExpresionY> valores = lista.getElementos();
-
-                for (int i = 0; i < valores.size() && i < campos.size(); i++) {
-                    ResultadoC3D v = valores.get(i).generarC3D(generador);
-                    // Usar emitirGuardarCampo para que genere la instrucción correcta
-                    generador.emitirGuardarCampo(dest, campos.get(i).getNombre(), v.getLugar());
+            if (inicializador == null) {
+                for (Simbolo campo : te.getDefinicion().getMiembrosEnOrden()) {
+                    if (campo.getTipo() instanceof TipoEstructura subTe) {
+                        String tSub = generador.nuevoTemporal();
+                        generador.emitirNew(subTe.nombre(), tSub);
+                        generador.emitirGuardarCampo(dest, campo.getNombre(), tSub);
+                    }
+                }
+            } else if (inicializador instanceof ListaLiteral lista) {
+                generarC3DCamposEstructura(dest, te, lista.getElementos(), generador);
+            } else {
+                ResultadoC3D rhs = inicializador.generarC3D(generador);
+                for (Simbolo campo : te.getDefinicion().getMiembrosEnOrden()) {
+                    String tCampo = generador.nuevoTemporal();
+                    generador.emitirCargaCampo(rhs.getLugar(), campo.getNombre(), tCampo);
+                    generador.emitirGuardarCampo(dest, campo.getNombre(), tCampo);
                 }
             }
             return ResultadoC3D.vacio();
         }
 
-        // --- CASO NORMAL: primitivos ---
         if (inicializador != null) {
             ResultadoC3D v = inicializador.generarC3D(generador);
             generador.emitirAsignacion(v.getLugar(), dest);
         }
         return ResultadoC3D.vacio();
+    }
+
+    private void generarC3DCamposEstructura(String tObjeto, TipoEstructura te, List<ExpresionY> valores, GeneradorC3D generador) {
+        List<Simbolo> campos = te.getDefinicion().getMiembrosEnOrden();
+
+        for (int i = 0; i < valores.size() && i < campos.size(); i++) {
+            Simbolo campoActual = campos.get(i);
+            ExpresionY valorActual = valores.get(i);
+
+            if (campoActual.getTipo() instanceof TipoEstructura subEstructura && valorActual instanceof ListaLiteral subLista) {
+                String tSub = generador.nuevoTemporal();
+                generador.emitirNew(subEstructura.nombre(), tSub);
+                generarC3DCamposEstructura(tSub, subEstructura, subLista.getElementos(), generador);
+                generador.emitirGuardarCampo(tObjeto, campoActual.getNombre(), tSub);
+            } else {
+                ResultadoC3D v = valorActual.generarC3D(generador);
+                generador.emitirGuardarCampo(tObjeto, campoActual.getNombre(), v.getLugar());
+            }
+        }
     }
 }

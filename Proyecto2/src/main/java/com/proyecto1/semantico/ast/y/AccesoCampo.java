@@ -68,4 +68,8 @@ public final class AccesoCampo extends NodoY implements ExpresionY {
         Tipo tipo = (tipoCampo != null) ? tipoCampo : TipoPrimitivo.DESCONOCIDO;
         return ResultadoC3D.temporal(t, tipo);
     }
+
+    public void setTipoCampo(Tipo tipoCampo) {
+        this.tipoCampo = tipoCampo;
+    }
 }
