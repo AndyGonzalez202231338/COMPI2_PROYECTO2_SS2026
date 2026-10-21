@@ -153,7 +153,12 @@ public final class FrameFuncion {
             case CuadruplaCampoCarga q -> List.of(seguro(q.objeto()), seguro(q.destino()));
             case CuadruplaCampoGuarda q -> List.of(seguro(q.objeto()), seguro(q.valor()));
             case CuadruplaNew q -> List.of(seguro(q.destino()));
-            case CuadruplaNewArray q -> List.of(seguro(q.destino()));
+            case CuadruplaNewArray q -> {
+                java.util.List<String> ns = new java.util.ArrayList<>();
+                ns.add(seguro(q.destino()));
+                for (String t : q.tamanos()) ns.add(seguro(t));
+                yield ns;
+            }
             case CuadruplaConcat q -> List.of(seguro(q.a()), seguro(q.b()), seguro(q.t()));
             case CuadruplaCompCadena q -> List.of(seguro(q.a()), seguro(q.b()), seguro(q.t()));
             case CuadruplaConversion q -> List.of(seguro(q.valor()), seguro(q.destino()));

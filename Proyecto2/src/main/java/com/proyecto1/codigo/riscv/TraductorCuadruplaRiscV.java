@@ -2,7 +2,7 @@ package com.proyecto1.codigo.riscv;
 
 import com.proyecto1.semantico.ast.cuadruplas.*;
 
-// Traduce UNA cuadrupla a instrucciones RISC-V (RV32I) y las agrega al StringBuilder.
+// Traduce UNA cuadrupla a instrucciones RISC-V (RV32I + F) y las agrega al StringBuilder.
 //
 // Convencion de trabajo (estrategia simple, sin asignacion de registros):
 //   - Ningun dato vive permanentemente en un registro. Cada variable y temporal tiene
@@ -341,23 +341,20 @@ public final class TraductorCuadruplaRiscV {
     }
 
     // ===============================================================
-    // Entrada y salida (subfase 4) - convencion de Venus
+    // Entrada y salida (subfase 4) - convencion RARS
     // ===============================================================
     //
-    // En Venus una llamada al sistema se hace asi (verificado en su codigo fuente):
-    //     a0 = codigo del servicio
-    //     a1 = argumento
+    // Llamadas al sistema en RARS:
+    //     a7 = codigo del servicio
+    //     a0 = argumento (o fa0 para flotantes)
     //     ecall
     // Servicios que se usan:
-    //     1  -> imprimir el entero que esta en a1
-    //     4  -> imprimir la cadena cuya DIRECCION esta en a1 (termina en el byte 0)
-    //     11 -> imprimir el caracter cuyo codigo ASCII esta en a1
+    //     1  -> imprimir el entero que esta en a0
+    //     2  -> imprimir el flotante que esta en fa0
+    //     4  -> imprimir la cadena cuya DIRECCION esta en a0
+    //     5  -> leer un entero del teclado, resultado en a0
     //     10 -> terminar el programa
-    // OJO: es al reves que en RARS (alli el codigo va en a7 y el argumento en a0).
-    //
-    // a0 y a1 se pisan en cada impresion, pero no importa: ningun dato vive en
-    // registros entre cuadruplas (todo esta en la pila), y el valor de retorno de un
-    // call ya se guardo en su slot justo despues del jal.
+    //     11 -> imprimir el caracter cuyo codigo ASCII esta en a0
 
     // print v / println v
     // El tipo decide el servicio. Si la cuadrupla no trae tipo, se deduce del literal;
@@ -405,12 +402,8 @@ public final class TraductorCuadruplaRiscV {
         return "entero";
     }
 
-    // read destino
-    // Venus no tiene ninguna llamada al sistema para leer del teclado (solo imprime,
-    // reserva heap y termina). Por eso la lectura deja 0 en el destino, para que el
-    // programa pueda seguir. Con otro emulador (RARS) aqui iria su ecall de lectura.
+    // read destino: RARS ecall 5 lee un entero del teclado y lo deja en a0.
     private void traducirRead(CuadruplaRead q, StringBuilder sb) {
-        // RARS ecall 5: lee un entero del teclado y lo deja en a0.
         sb.append("    li a7, 5\n");
         sb.append("    ecall\n");
         guardar("a0", q.destino(), sb);
@@ -621,9 +614,11 @@ public final class TraductorCuadruplaRiscV {
         sb.append("    j ").append(loopB).append("\n");
         sb.append(finB).append(":\n");
 
-        // Byte terminador y actualizar heap_ptr
+        // Byte terminador, alinear a 4 bytes y actualizar heap_ptr.
         sb.append("    sb zero, 0(t3)\n");
         sb.append("    addi t3, t3, 1\n");
+        sb.append("    addi t3, t3, 3\n");
+        sb.append("    andi t3, t3, -4\n");
         sb.append("    la t0, heap_ptr\n");
         sb.append("    sw t3, 0(t0)\n");
 
@@ -711,6 +706,9 @@ public final class TraductorCuadruplaRiscV {
         sb.append("    sb t0, 0(t3)\n");
         sb.append("    sb zero, 1(t3)\n");
         sb.append("    addi t4, t3, 2\n");
+        // Alinear a 4 bytes para que el siguiente new/newarray no falle.
+        sb.append("    addi t4, t4, 3\n");
+        sb.append("    andi t4, t4, -4\n");
         sb.append("    sw t4, 0(t1)\n");
         guardar("t3", q.destino(), sb);
     }
@@ -790,10 +788,12 @@ public final class TraductorCuadruplaRiscV {
         sb.append("    addi t0, t0, -1\n");
         sb.append("    j ").append(revLoop).append("\n");
 
-        // Terminador y actualizar heap_ptr. t3 nunca se toco durante el swap, asi que sigue apuntando correctamente al final de los digitos.
+        // Terminador, alinear a 4 bytes y actualizar heap_ptr.
         sb.append(fin).append(":\n");
         sb.append("    sb zero, 0(t3)\n");
         sb.append("    addi t3, t3, 1\n");
+        sb.append("    addi t3, t3, 3\n");
+        sb.append("    andi t3, t3, -4\n");
         sb.append("    la t5, heap_ptr\n");
         sb.append("    sw t3, 0(t5)\n");
 
@@ -904,9 +904,11 @@ public final class TraductorCuadruplaRiscV {
             sb.append("    addi t3, t3, 1\n");
         }
 
-        // Terminador y actualizar heap_ptr.
+        // Terminador, alinear a 4 bytes y actualizar heap_ptr.
         sb.append("    sb zero, 0(t3)\n");
         sb.append("    addi t3, t3, 1\n");
+        sb.append("    addi t3, t3, 3\n");
+        sb.append("    andi t3, t3, -4\n");
         sb.append("    la t5, heap_ptr\n");
         sb.append("    sw t3, 0(t5)\n");
 

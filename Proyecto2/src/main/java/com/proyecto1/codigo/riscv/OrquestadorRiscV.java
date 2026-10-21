@@ -10,7 +10,7 @@ import java.util.Map;
 
 // Ensambla un archivo RISC-V (.s) completo a partir de las cuadruplas y firmas de un
 // programa. Es el equivalente de OrquestadorC3DaC pero generando ensamblador en vez
-// de C. Se disena para el emulador Venus (RV32I).
+// de C. Se disena para el emulador RARS (RV32I + extension F para flotantes).
 //
 // Estructura del .s que produce:
 //
@@ -79,9 +79,8 @@ public final class OrquestadorRiscV {
             funciones.addAll(dividirPorFuncion(u));
         }
 
-        // 2) Venus empieza a ejecutar en la PRIMERA instruccion del codigo, sin mirar
-        //    etiquetas (verificado en su documentacion). Por eso la funcion de entrada
-        //    se mueve al principio; si no, el programa arrancaria en otra funcion.
+        // 2) RARS busca la etiqueta "main" si hay .globl main, pero para mayor
+        //    compatibilidad la funcion de entrada se mueve al principio del .text.
         List<FuncionCompilada> ordenadas = new ArrayList<>();
         for (FuncionCompilada fc : funciones) {
             if (fc.begin().nombre().equals(nombreFuncionEntrada)) ordenadas.add(fc);
@@ -100,8 +99,8 @@ public final class OrquestadorRiscV {
 
         // 4) Armar el archivo: cabecera, .data con las cadenas, .text con el codigo.
         StringBuilder sb = new StringBuilder();
-        sb.append("# Codigo RISC-V (RV32I) generado automaticamente\n");
-        sb.append("# Pensado para el emulador Venus\n");
+        sb.append("# Codigo RISC-V (RV32I + F) generado automaticamente\n");
+        sb.append("# Pensado para el emulador RARS\n");
         if (unidades.size() > 1) {
             sb.append("# Incluye:");
             for (UnidadRiscV u : unidades) sb.append(" ").append(u.nombre());
@@ -128,19 +127,7 @@ public final class OrquestadorRiscV {
         //   heap_mem: el bloque de memoria que se va repartiendo.
         sb.append("\n# --- heap: memoria para new (objetos, estructuras y arreglos) ---\n");
         sb.append("heap_ptr: .word 0\n");
-        sb.append("heap_mem:\n");
-        // El bloque se reserva con .word en vez de .space porque Venus solo acepta
-        // .data, .text, .byte, .asciiz, .word y .globl (verificado en su codigo
-        // fuente): con .space el ensamblado falla. Se escriben varias palabras por
-        // linea para que el .s no quede con miles de lineas.
-        int palabras = BYTES_HEAP / 4;
-        int porLinea = 32;
-        for (int i = 0; i < palabras; i += porLinea) {
-            int n = Math.min(porLinea, palabras - i);
-            sb.append("    .word");
-            for (int k = 0; k < n; k++) sb.append(k == 0 ? " 0" : ", 0");
-            sb.append("\n");
-        }
+        sb.append("heap_mem: .space ").append(BYTES_HEAP).append("\n");
         sb.append("\n.text\n");
         sb.append(".globl main\n\n");
         sb.append(texto);
@@ -248,7 +235,7 @@ public final class OrquestadorRiscV {
         sb.append("    addi sp, sp, ").append(tam).append("\n");
         if (esEntrada) {
             // Funcion de entrada (main): en vez de retornar a nadie, termina el programa.
-            // Venus: codigo del servicio en a0. El 10 termina el programa.
+            // RARS: servicio 10 en a7 termina el programa.
             sb.append("    li a7, 10\n");
             sb.append("    ecall\n\n");
         } else {
