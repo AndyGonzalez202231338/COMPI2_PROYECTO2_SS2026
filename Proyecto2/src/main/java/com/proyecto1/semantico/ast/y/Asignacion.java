@@ -6,6 +6,8 @@ import com.proyecto1.semantico.errores.ManejadorErrores;
 import com.proyecto1.semantico.tabla.Ambito;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
+import com.proyecto1.semantico.tipos.TipoArreglo;
+import com.proyecto1.semantico.tipos.TipoEstructura;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
 import com.proyecto1.semantico.tipos.Tipos;
 
@@ -31,32 +33,75 @@ public final class Asignacion extends NodoY implements InstruccionY {
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
-        if (objetivo instanceof Identificador id) {
-            Simbolo s = ambito.resolver(id.getNombre());
-            if (s != null) s.marcarInicializado();
-        }
-        Tipo tIzq = objetivo.verificar(ambito, errores);
+        // 1. Resolver tipo del LHS sin disparar error de "no inicializado"
+        Tipo tIzq = resolverTipoLadoIzquierdo(objetivo, ambito, errores);
+
+        // 2. Verificar el RHS (el valor que se va a asignar)
         if (valor instanceof Leer lectura) lectura.setTipoEsperado(tIzq);
         Tipo tDer = valor.verificar(ambito, errores);
 
-        if (!Tipos.esAsignable(tIzq, tDer)) {
+        // 3. Validar compatibilidad de tipos
+        if (!operador.equals("=")) {
+            Tipo r = Tipos.resultadoAritmetico(tIzq, tDer, operador.equals("+="));
+            if (r == null) {
+                errores.reportar(linea, columna,
+                        "Operador '" + operador + "' no válido entre " + tIzq.nombre() + " y " + tDer.nombre());
+            }
+        } else if (!Tipos.esAsignable(tIzq, tDer)) {
             errores.reportar(linea, columna,
                     "No se puede asignar " + tDer.nombre() + " a " + tIzq.nombre());
         }
 
+        // 4. Marcar la variable raíz (ej. 'q' en q.x) como inicializada
+        marcarRaizInicializada(objetivo, ambito);
+
         return tIzq;
     }
 
-    /**
-     * Emite la asignación para cualquiera de los tres tipos de lvalue que admite la
-     * gramática: variable simple, campo de estructura, elemento de arreglo.
-     *
-     * Orden de evaluación (coherente con C):
-     *   1. resolverLValue(objetivo)  -> evalúa subexpresiones del lvalue UNA sola vez
-     *      (p. ej. el i() de arr[i()] o el obj de obj.f).
-     *   2. Si op == "=": C3D del RHS y guardarEn(lv, rhs).
-     *      Si op es compuesto: cargarDe(lv) (t = x), C3D del RHS, emitirBinaria, guardar.
-     */
+
+    private Tipo resolverTipoLadoIzquierdo(ExpresionY exp, Ambito ambito, ManejadorErrores errores) {
+        if (exp instanceof Identificador id) {
+            Simbolo s = ambito.resolver(id.getNombre());
+            if (s == null) {
+                errores.reportar(id.getLinea(), id.getColumna(), "Variable no declarada: '" + id.getNombre() + "'");
+                return TipoPrimitivo.DESCONOCIDO;
+            }
+            return s.getTipo(); // Retorna el tipo SIN quejarse de que no está inicializada
+        }
+        if (exp instanceof AccesoCampo ac) {
+            Tipo tBase = resolverTipoLadoIzquierdo(ac.getObjeto(), ambito, errores);
+            if (tBase instanceof TipoEstructura te) {
+                Simbolo campo = te.getDefinicion().buscarMiembro(ac.getCampo());
+                if (campo == null) {
+                    errores.reportar(ac.getLinea(), ac.getColumna(),
+                            "La estructura '" + te.nombre() + "' no tiene el campo '" + ac.getCampo() + "'");
+                    return TipoPrimitivo.DESCONOCIDO;
+                }
+                return campo.getTipo();
+            }
+            return TipoPrimitivo.DESCONOCIDO;
+        }
+        if (exp instanceof Indice ind) {
+            // Para un índice (arr[i] = x), el arreglo SÍ debe estar inicializado para acceder a él.
+            Tipo tArr = ind.getArreglo().verificar(ambito, errores);
+            if (tArr instanceof TipoArreglo ta) return ta.getBase();
+            return TipoPrimitivo.DESCONOCIDO;
+        }
+        // Fallback por si es otra expresión
+        return exp.verificar(ambito, errores);
+    }
+
+    private void marcarRaizInicializada(ExpresionY exp, Ambito ambito) {
+        if (exp instanceof Identificador id) {
+            Simbolo s = ambito.resolver(id.getNombre());
+            if (s != null) s.marcarInicializado();
+        } else if (exp instanceof AccesoCampo ac) {
+            marcarRaizInicializada(ac.getObjeto(), ambito); // Sube recursivamente hasta 'q'
+        } else if (exp instanceof Indice ind) {
+            marcarRaizInicializada(ind.getArreglo(), ambito);
+        }
+    }
+
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         LValue lv = resolverLValue(objetivo, generador);
@@ -75,20 +120,11 @@ public final class Asignacion extends NodoY implements InstruccionY {
         return ResultadoC3D.vacio();
     }
 
-    // ---------- ayudantes privados ----------
-
-    /**
-     * Descripción "sin resolver a dirección" de un lvalue: guarda los lugares donde
-     * quedaron la base (nombre de variable o temporal), el nombre del campo (si aplica)
-     * y el índice ya evaluado (si aplica). Solo uno de {campo, indice} es no-null.
-     */
     private record LValue(String base, String campo, String indice, Tipo tipo) {}
 
     private LValue resolverLValue(ExpresionY objetivo, GeneradorC3D generador) {
         if (objetivo instanceof Identificador id) {
             Tipo t = TipoPrimitivo.DESCONOCIDO;
-            // Nombre que se escribe en el C3D: el nombre unico del simbolo (x_1, x_2...)
-            // para no pisar una variable del mismo nombre declarada en otro bloque.
             String destino = id.getNombre();
             Ambito amb = generador.getAmbito();
             if (amb != null) {
