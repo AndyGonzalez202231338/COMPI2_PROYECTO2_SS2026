@@ -43,16 +43,17 @@ public final class Funcion extends NodoY {
         AmbitoFuncion amb = new AmbitoFuncion(ambito, simbolo);
         this.ambitoPropio = amb;
 
+        // Los parametros ya se resolvieron y se adjuntaron a "simbolo" durante la
+        // primera pasada (AnalizadorSemanticoY), para que otra funcion pueda
+        // llamar a esta aunque este declarada mas abajo. Aqui solo se declaran
+        // esos mismos Simbolo (ya existentes) en el ambito local de ESTA funcion,
+        // sin volver a crearlos ni re-agregarlos (eso los duplicaria).
         tiposParamsCache = new ArrayList<>();
-        for (Parametro p : parametros) {
-            Tipo t = p.resolverTipo(amb, errores);
-            tiposParamsCache.add(t);
-            Simbolo sp = new Simbolo(p.getNombre(), CategoriaSimbolo.PARAMETRO, t,
-                    p.getLinea(), p.getColumna());
+        for (Simbolo sp : simbolo.getParametros()) {
+            tiposParamsCache.add(sp.getTipo());
             if (!amb.declarar(sp))
-                errores.reportar(p.getLinea(), p.getColumna(),
-                        "Parámetro duplicado: '" + p.getNombre() + "'");
-            simbolo.agregarParametro(sp);
+                errores.reportar(sp.getLinea(), sp.getColumna(),
+                        "Parámetro duplicado: '" + sp.getNombre() + "'");
         }
         tipoRetornoCache = (tipoRetorno == null)
                 ? TipoPrimitivo.VOID
