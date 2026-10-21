@@ -87,31 +87,8 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                             ? te.getDefinicion()
                             : ((TipoClase) t).getDefinicion();
 
-                    List<Simbolo> campos = new ArrayList<>();
-                    for (Simbolo m : defStruct.getMiembrosEnOrden()) {
-                        if (m.getCategoria() == CategoriaSimbolo.CAMPO
-                                || m.getCategoria() == CategoriaSimbolo.ATRIBUTO) {
-                            campos.add(m);
-                        }
-                    }
-                    List<ExpresionPigLatin> valores = lit.getElementos();
-
-                    if (campos.size() != valores.size()) {
-                        errores.reportar(linea, columna,
-                                "Estructura '" + defStruct.getNombre() + "' espera " + campos.size()
-                                        + " valores, se recibieron " + valores.size());
-                    } else {
-                        for (int i = 0; i < valores.size(); i++) {
-                            Tipo tVal = valores.get(i).verificar(ambito, errores);
-                            Tipo tCampo = campos.get(i).getTipo();
-                            if (!Tipos.esAsignable(tCampo, tVal)) {
-                                errores.reportar(valores.get(i).getLinea(), valores.get(i).getColumna(),
-                                        "Campo " + (i + 1) + " ('" + campos.get(i).getNombre()
-                                                + "') espera " + tCampo.nombre()
-                                                + ", se recibió " + tVal.nombre());
-                            }
-                        }
-                    }
+                    // Validación recursiva de campos (soporta anidamiento)
+                    validarCamposEstructura(defStruct, lit.getElementos(), ambito, errores);
                     initAUsar = null;
                 }
                 break;
@@ -166,31 +143,7 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                 this.tipoCache = t;
 
                 if (inicializadorEstructura != null) {
-                    List<Simbolo> campos = new ArrayList<>();
-                    for (Simbolo m : s.getMiembrosEnOrden()) {
-                        if (m.getCategoria() == CategoriaSimbolo.CAMPO
-                                || m.getCategoria() == CategoriaSimbolo.ATRIBUTO) {
-                            campos.add(m);
-                        }
-                    }
-                    List<ExpresionPigLatin> valores = inicializadorEstructura.getElementos();
-
-                    if (campos.size() != valores.size()) {
-                        errores.reportar(linea, columna,
-                                "Estructura '" + s.getNombre() + "' espera " + campos.size()
-                                        + " valores, se recibieron " + valores.size());
-                    } else {
-                        for (int i = 0; i < valores.size(); i++) {
-                            Tipo tVal = valores.get(i).verificar(ambito, errores);
-                            Tipo tCampo = campos.get(i).getTipo();
-                            if (!Tipos.esAsignable(tCampo, tVal)) {
-                                errores.reportar(valores.get(i).getLinea(), valores.get(i).getColumna(),
-                                        "Campo " + (i + 1) + " ('" + campos.get(i).getNombre()
-                                                + "') espera " + tCampo.nombre()
-                                                + ", se recibió " + tVal.nombre());
-                            }
-                        }
-                    }
+                    validarCamposEstructura(s, inicializadorEstructura.getElementos(), ambito, errores);
                 }
                 break;
             default:
@@ -211,6 +164,48 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
         }
         sim.marcarInicializado();
         return TipoPrimitivo.VOID;
+    }
+
+    /**
+     * Valida los valores de un InicializadorArreglo contra los campos de una estructura.
+     * Si encuentra una estructura anidada, se llama a sí misma recursivamente.
+     */
+    private void validarCamposEstructura(Simbolo defStruct, List<ExpresionPigLatin> valores, Ambito ambito, ManejadorErrores errores) {
+        List<Simbolo> campos = new ArrayList<>();
+        for (Simbolo m : defStruct.getMiembrosEnOrden()) {
+            if (m.getCategoria() == CategoriaSimbolo.CAMPO || m.getCategoria() == CategoriaSimbolo.ATRIBUTO) {
+                campos.add(m);
+            }
+        }
+
+        if (campos.size() != valores.size()) {
+            errores.reportar(linea, columna,
+                    "Estructura '" + defStruct.getNombre() + "' espera " + campos.size()
+                            + " valores, se recibieron " + valores.size());
+            return;
+        }
+
+        for (int i = 0; i < valores.size(); i++) {
+            Simbolo campoActual = campos.get(i);
+            ExpresionPigLatin valorActual = valores.get(i);
+            Tipo tCampo = campoActual.getTipo();
+
+            // SI EL CAMPO ES UNA ESTRUCTURA Y EL VALOR ES UNA LISTA -> Validación recursiva
+            if (tCampo instanceof TipoEstructura subEstructura && valorActual instanceof InicializadorArreglo subLista) {
+                validarCamposEstructura(subEstructura.getDefinicion(), subLista.getElementos(), ambito, errores);
+            } else if (tCampo instanceof TipoClase subClase && valorActual instanceof InicializadorArreglo subLista) {
+                validarCamposEstructura(subClase.getDefinicion(), subLista.getElementos(), ambito, errores);
+            } else {
+                // Validación normal (primitivos)
+                Tipo tVal = valorActual.verificar(ambito, errores);
+                if (!Tipos.esAsignable(tCampo, tVal)) {
+                    errores.reportar(valorActual.getLinea(), valorActual.getColumna(),
+                            "Campo " + (i + 1) + " ('" + campoActual.getNombre()
+                                    + "') espera " + tCampo.nombre()
+                                    + ", se recibió " + tVal.nombre());
+                }
+            }
+        }
     }
 
     @Override
@@ -235,18 +230,8 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                     String t = generador.nuevoTemporal();
                     generador.emitirNew(defStruct.getNombre(), t);
 
-                    List<Simbolo> campos = new ArrayList<>();
-                    for (Simbolo m : defStruct.getMiembrosEnOrden()) {
-                        if (m.getCategoria() == CategoriaSimbolo.CAMPO
-                                || m.getCategoria() == CategoriaSimbolo.ATRIBUTO) {
-                            campos.add(m);
-                        }
-                    }
-                    List<ExpresionPigLatin> valores = lit.getElementos();
-                    for (int i = 0; i < campos.size() && i < valores.size(); i++) {
-                        ResultadoC3D v = valores.get(i).generarC3D(generador);
-                        generador.emitirGuardarCampo(t, campos.get(i).getNombre(), v.getLugar());
-                    }
+                    generarC3DCamposEstructura(t, defStruct, lit.getElementos(), generador);
+
                     generador.emitirAsignacion(t, destino);
                     return ResultadoC3D.vacio();
                 }
@@ -279,20 +264,8 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
                 String t = generador.nuevoTemporal();
                 generador.emitirNew(nombreTipoEstructura, t);
 
-                List<Simbolo> campos = new ArrayList<>();
                 if (s != null) {
-                    for (Simbolo m : s.getMiembrosEnOrden()) {
-                        if (m.getCategoria() == CategoriaSimbolo.CAMPO
-                                || m.getCategoria() == CategoriaSimbolo.ATRIBUTO) {
-                            campos.add(m);
-                        }
-                    }
-                }
-
-                List<ExpresionPigLatin> valores = inicializadorEstructura.getElementos();
-                for (int i = 0; i < campos.size() && i < valores.size(); i++) {
-                    ResultadoC3D v = valores.get(i).generarC3D(generador);
-                    generador.emitirGuardarCampo(t, campos.get(i).getNombre(), v.getLugar());
+                    generarC3DCamposEstructura(t, s, inicializadorEstructura.getElementos(), generador);
                 }
 
                 generador.emitirAsignacion(t, destino);
@@ -300,6 +273,32 @@ public final class DeclaracionVariable extends NodoPigLatin implements Instrucci
             }
             default:
                 return ResultadoC3D.vacio();
+        }
+    }
+
+    private void generarC3DCamposEstructura(String tObjeto, Simbolo defStruct, List<ExpresionPigLatin> valores, GeneradorC3D generador) {
+        List<Simbolo> campos = new ArrayList<>();
+        for (Simbolo m : defStruct.getMiembrosEnOrden()) {
+            if (m.getCategoria() == CategoriaSimbolo.CAMPO || m.getCategoria() == CategoriaSimbolo.ATRIBUTO) {
+                campos.add(m);
+            }
+        }
+
+        for (int i = 0; i < campos.size() && i < valores.size(); i++) {
+            Simbolo campoActual = campos.get(i);
+            ExpresionPigLatin valorActual = valores.get(i);
+
+            if (campoActual.getTipo() instanceof TipoEstructura subEstructura && valorActual instanceof InicializadorArreglo subLista) {
+                // Estructura anidada: reservar memoria para el hijo y guardar su puntero en el padre
+                String tSub = generador.nuevoTemporal();
+                generador.emitirNew(subEstructura.nombre(), tSub);
+                generarC3DCamposEstructura(tSub, subEstructura.getDefinicion(), subLista.getElementos(), generador);
+                generador.emitirGuardarCampo(tObjeto, campoActual.getNombre(), tSub);
+            } else {
+                // Primitivo
+                ResultadoC3D v = valorActual.generarC3D(generador);
+                generador.emitirGuardarCampo(tObjeto, campoActual.getNombre(), v.getLugar());
+            }
         }
     }
 }

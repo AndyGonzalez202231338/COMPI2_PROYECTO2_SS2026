@@ -11,13 +11,10 @@ import com.proyecto1.semantico.tipos.TipoEstructura;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
 import com.proyecto1.semantico.tipos.Tipos;
 
-/**
- * (#asigDef): "ID (.campo | [indice])* op= expresion".
- */
 public final class Asignacion extends NodoY implements InstruccionY {
 
     private final ExpresionY objetivo;
-    private final String operador; // "=", "+=", "-=", "*=", "/="
+    private final String operador;
     private final ExpresionY valor;
 
     public Asignacion(ExpresionY objetivo, String operador, ExpresionY valor, int linea, int columna) {
@@ -33,14 +30,11 @@ public final class Asignacion extends NodoY implements InstruccionY {
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
-        // 1. Resolver tipo del LHS sin disparar error de "no inicializado"
         Tipo tIzq = resolverTipoLadoIzquierdo(objetivo, ambito, errores);
 
-        // 2. Verificar el RHS (el valor que se va a asignar)
         if (valor instanceof Leer lectura) lectura.setTipoEsperado(tIzq);
         Tipo tDer = valor.verificar(ambito, errores);
 
-        // 3. Validar compatibilidad de tipos
         if (!operador.equals("=")) {
             Tipo r = Tipos.resultadoAritmetico(tIzq, tDer, operador.equals("+="));
             if (r == null) {
@@ -52,12 +46,9 @@ public final class Asignacion extends NodoY implements InstruccionY {
                     "No se puede asignar " + tDer.nombre() + " a " + tIzq.nombre());
         }
 
-        // 4. Marcar la variable raíz (ej. 'q' en q.x) como inicializada
         marcarRaizInicializada(objetivo, ambito);
-
         return tIzq;
     }
-
 
     private Tipo resolverTipoLadoIzquierdo(ExpresionY exp, Ambito ambito, ManejadorErrores errores) {
         if (exp instanceof Identificador id) {
@@ -66,7 +57,7 @@ public final class Asignacion extends NodoY implements InstruccionY {
                 errores.reportar(id.getLinea(), id.getColumna(), "Variable no declarada: '" + id.getNombre() + "'");
                 return TipoPrimitivo.DESCONOCIDO;
             }
-            return s.getTipo(); // Retorna el tipo SIN quejarse de que no está inicializada
+            return s.getTipo();
         }
         if (exp instanceof AccesoCampo ac) {
             Tipo tBase = resolverTipoLadoIzquierdo(ac.getObjeto(), ambito, errores);
@@ -77,17 +68,19 @@ public final class Asignacion extends NodoY implements InstruccionY {
                             "La estructura '" + te.nombre() + "' no tiene el campo '" + ac.getCampo() + "'");
                     return TipoPrimitivo.DESCONOCIDO;
                 }
+                ac.setTipoCampo(campo.getTipo());
                 return campo.getTipo();
             }
             return TipoPrimitivo.DESCONOCIDO;
         }
         if (exp instanceof Indice ind) {
-            // Para un índice (arr[i] = x), el arreglo SÍ debe estar inicializado para acceder a él.
-            Tipo tArr = ind.getArreglo().verificar(ambito, errores);
-            if (tArr instanceof TipoArreglo ta) return ta.getBase();
+            Tipo tArr = resolverTipoLadoIzquierdo(ind.getArreglo(), ambito, errores);
+            if (tArr instanceof TipoArreglo ta) {
+                ind.setTipoElemento(ta.getBase());
+                return ta.getBase();
+            }
             return TipoPrimitivo.DESCONOCIDO;
         }
-        // Fallback por si es otra expresión
         return exp.verificar(ambito, errores);
     }
 
@@ -96,7 +89,7 @@ public final class Asignacion extends NodoY implements InstruccionY {
             Simbolo s = ambito.resolver(id.getNombre());
             if (s != null) s.marcarInicializado();
         } else if (exp instanceof AccesoCampo ac) {
-            marcarRaizInicializada(ac.getObjeto(), ambito); // Sube recursivamente hasta 'q'
+            marcarRaizInicializada(ac.getObjeto(), ambito);
         } else if (exp instanceof Indice ind) {
             marcarRaizInicializada(ind.getArreglo(), ambito);
         }
@@ -108,11 +101,23 @@ public final class Asignacion extends NodoY implements InstruccionY {
 
         if (operador.equals("=")) {
             ResultadoC3D rhs = valor.generarC3D(generador);
-            guardarEn(lv, rhs.getLugar(), generador);
+
+            if (lv.tipo() instanceof TipoEstructura te) {
+                String tNuevo = generador.nuevoTemporal();
+                generador.emitirNew(te.nombre(), tNuevo);
+                for (Simbolo campo : te.getDefinicion().getMiembrosEnOrden()) {
+                    String tCampo = generador.nuevoTemporal();
+                    generador.emitirCargaCampo(rhs.getLugar(), campo.getNombre(), tCampo);
+                    generador.emitirGuardarCampo(tNuevo, campo.getNombre(), tCampo);
+                }
+                guardarEn(lv, tNuevo, generador);
+            } else {
+                guardarEn(lv, rhs.getLugar(), generador);
+            }
         } else {
             ResultadoC3D actual = cargarDe(lv, generador);
             ResultadoC3D rhs = valor.generarC3D(generador);
-            String opBin = operador.substring(0, operador.length() - 1); // "+=" -> "+"
+            String opBin = operador.substring(0, operador.length() - 1);
             String t = generador.nuevoTemporal();
             generador.emitirBinaria(opBin, actual.getLugar(), rhs.getLugar(), t);
             guardarEn(lv, t, generador);
@@ -140,13 +145,12 @@ public final class Asignacion extends NodoY implements InstruccionY {
             return new LValue(base.getLugar(), ac.getCampo(), null, t);
         }
         if (objetivo instanceof Indice ind) {
-            ResultadoC3D base = ind.getArreglo().generarC3D(generador);
-            ResultadoC3D idx  = ind.getIndice().generarC3D(generador);
+            ResultadoC3D base = ind.getBaseArray().generarC3D(generador);
+            ResultadoC3D idxPlano = ind.generarIndicePlano(generador);
             Tipo t = (ind.getTipoElemento() != null) ? ind.getTipoElemento() : TipoPrimitivo.DESCONOCIDO;
-            return new LValue(base.getLugar(), null, idx.getLugar(), t);
+            return new LValue(base.getLugar(), null, idxPlano.getLugar(), t);
         }
-        throw new UnsupportedOperationException(
-                "Asignación a " + objetivo.getClass().getSimpleName() + ": pendiente en C3D");
+        throw new UnsupportedOperationException("Asignación a " + objetivo.getClass().getSimpleName() + ": pendiente en C3D");
     }
 
     private ResultadoC3D cargarDe(LValue lv, GeneradorC3D generador) {
