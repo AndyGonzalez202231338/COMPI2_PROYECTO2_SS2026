@@ -1053,7 +1053,7 @@ public final class TraductorCuadruplaRiscV {
             sb.append("    li ").append(reg).append(", 1\n");
             return;
         }
-        if (operando.equals("false") || operando.equals("null")) {
+        if (operando.equals("false") || operando.equalsIgnoreCase("null")) {
             sb.append("    li ").append(reg).append(", 0\n");
             return;
         }

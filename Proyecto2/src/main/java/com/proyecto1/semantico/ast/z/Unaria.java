@@ -67,18 +67,15 @@ public final class Unaria extends NodoZ implements ExpresionZ {
                 if (operando instanceof AccesoCampo ac) {
                     ResultadoC3D base = ac.getObjeto().generarC3D(generador);
                     String viejoC = generador.nuevoTemporal();
-                    generador.emitirCargaCampo(base.getLugar(), ac.getCampo(), viejoC);
+                    Tipo tc = ac.getTipoCampo() != null ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
+                    String tipoStr = tc != TipoPrimitivo.DESCONOCIDO ? tc.nombre() : null;
+                    generador.emitirCargaCampo(base.getLugar(), ac.getCampo(), viejoC, tipoStr);
 
                     String nuevoC = generador.nuevoTemporal();
-
                     generador.emitirBinaria(operador.equals("++") ? "+" : "-", viejoC, "1", nuevoC);
-
                     generador.emitirGuardarCampo(base.getLugar(), ac.getCampo(), nuevoC);
 
-                    Tipo tc = ac.getTipoCampo() != null ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
-
                     return ResultadoC3D.temporal(prefijo ? nuevoC : viejoC, tc);
-
                 }
 
                 if (operando instanceof Indice ix) {
@@ -108,7 +105,9 @@ public final class Unaria extends NodoZ implements ExpresionZ {
                         Simbolo s = ambito.resolver(id.getNombre());
                         if (s != null && s.getCategoria() == CategoriaSimbolo.ATRIBUTO) {
                             String viejoC = generador.nuevoTemporal();
-                            generador.emitirCargaCampo("this", id.getNombre(), viejoC);
+                            Tipo tc2 = s.getTipo() != null ? s.getTipo() : TipoPrimitivo.DESCONOCIDO;
+                            String tipoStr2 = tc2 != TipoPrimitivo.DESCONOCIDO ? tc2.nombre() : null;
+                            generador.emitirCargaCampo("this", id.getNombre(), viejoC, tipoStr2);
                             String nuevoC = generador.nuevoTemporal();
                             generador.emitirBinaria(operador.equals("++") ? "+" : "-", viejoC, "1", nuevoC);
                             generador.emitirGuardarCampo("this", id.getNombre(), nuevoC);
