@@ -154,10 +154,33 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
             receptor = r.getLugar();
         }
         // Caso Identificador: sin receptor, nada que evaluar. Evaluar todos los argumentos, guardando sus lugares.
+        // Obtener los tipos formales del metodo resuelto (sin "this") para
+        // detectar si hay que convertir algun argumento antes de pasarlo.
+        List<com.proyecto1.semantico.tabla.Simbolo> paramsFormales =
+                (simboloResuelto != null) ? simboloResuelto.getParametros()
+                        : java.util.Collections.emptyList();
+
         List<String> lugaresArgs = new ArrayList<>();
-        for (ExpresionPigLatin a : argumentos) {
-            ResultadoC3D v = a.generarC3D(generador);
-            lugaresArgs.add(v.getLugar());
+        for (int _i = 0; _i < argumentos.size(); _i++) {
+            ResultadoC3D v = argumentos.get(_i).generarC3D(generador);
+            String lugar = v.getLugar();
+
+            // Si el argumento es entero pero el parametro formal es flotante,
+            // emitir una conversion i2f para que el callee reciba bits IEEE 754
+            // y no bits de entero (que interpretaria como un float ~0).
+            if (_i < paramsFormales.size()) {
+                Tipo tipoFormal = paramsFormales.get(_i).getTipo();
+                Tipo tipoReal   = v.getTipo();
+                if (tipoFormal == TipoPrimitivo.FLOTANTE
+                        && tipoReal != null
+                        && tipoReal != TipoPrimitivo.FLOTANTE
+                        && tipoReal != TipoPrimitivo.DESCONOCIDO) {
+                    String conv = generador.nuevoTemporal();
+                    generador.emitirConversion(tipoReal.nombre(), "flotante", lugar, conv);
+                    lugar = conv;
+                }
+            }
+            lugaresArgs.add(lugar);
         }
 
         // ¿El método devuelve void? Si es así, el call va SIN destino y

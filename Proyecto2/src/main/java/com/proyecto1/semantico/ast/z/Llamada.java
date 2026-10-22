@@ -244,10 +244,30 @@ public final class Llamada extends NodoZ implements ExpresionZ {
         }
 
         // 2) Evaluar todos los argumentos, guardando sus lugares.
+        // Si el argumento es entero pero el parametro formal es flotante,
+        // emitir conversion i2f para que el callee reciba bits IEEE 754.
+        List<Simbolo> paramsFormales =
+                (simboloMetodo != null) ? simboloMetodo.getParametros()
+                        : java.util.Collections.emptyList();
+
         List<String> lugaresArgs = new ArrayList<>();
-        for (ExpresionZ a : argumentos) {
-            ResultadoC3D v = a.generarC3D(generador);
-            lugaresArgs.add(v.getLugar());
+        for (int _i = 0; _i < argumentos.size(); _i++) {
+            ResultadoC3D v = argumentos.get(_i).generarC3D(generador);
+            String lugar = v.getLugar();
+
+            if (_i < paramsFormales.size()) {
+                Tipo tipoFormal = paramsFormales.get(_i).getTipo();
+                Tipo tipoReal   = v.getTipo();
+                if (tipoFormal == TipoPrimitivo.FLOTANTE
+                        && tipoReal != null
+                        && tipoReal != TipoPrimitivo.FLOTANTE
+                        && tipoReal != TipoPrimitivo.DESCONOCIDO) {
+                    String conv = generador.nuevoTemporal();
+                    generador.emitirConversion(tipoReal.nombre(), "flotante", lugar, conv);
+                    lugar = conv;
+                }
+            }
+            lugaresArgs.add(lugar);
         }
 
         // 3) Etiqueta. Tipos FORMALES del simbolo resuelto (excluye "this").
