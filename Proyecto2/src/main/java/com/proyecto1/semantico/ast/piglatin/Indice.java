@@ -61,16 +61,16 @@ public final class Indice extends NodoPigLatin implements ExpresionPigLatin {
         return tipoElemento;
     }
 
-    /**
-     * Emite, en orden: C3D del arreglo (base), C3D del índice, y UNA cuádrupla
-     * (=[] , base, idx, t). Devuelve ResultadoC3D.temporal(t, tipoElemento).
-     */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         ResultadoC3D base = arreglo.generarC3D(generador);
         ResultadoC3D idx  = indice.generarC3D(generador);
         String t = generador.nuevoTemporal();
-        generador.emitirCargaIndice(base.getLugar(), idx.getLugar(), t);
+
+        // FIX: Pasar el tipo de elemento al C3D
+        String tipoStr = (tipoElemento != null) ? tipoElemento.nombre() : null;
+        generador.emitirCargaIndice(base.getLugar(), idx.getLugar(), t, tipoStr);
+
         Tipo tipo = (tipoElemento != null) ? tipoElemento : TipoPrimitivo.DESCONOCIDO;
         return ResultadoC3D.temporal(t, tipo);
     }

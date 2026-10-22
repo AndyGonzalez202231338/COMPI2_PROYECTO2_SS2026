@@ -10,16 +10,6 @@ import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
 
-/**
- * Identificador de Z. Se diferencia de Y en un caso clave: si el símbolo resuelto
- * es un ATRIBUTO de la clase actual, no es una variable local, es un acceso
- * implícito a "this.<nombre>". Eso se emite como carga de campo.
- *
- * Motivo: AmbitoContenedor.declararMiembro registra los atributos en la tabla
- * del método/constructor con su nombre plano (por eso "return edad;" resuelve
- * solo). Basta con mirar la categoría del símbolo: ATRIBUTO -> this.<nombre>;
- * VARIABLE/PARAMETRO -> acceso local normal.
- */
 public final class Identificador extends NodoZ implements ExpresionZ {
 
     private final String nombre;
@@ -38,30 +28,15 @@ public final class Identificador extends NodoZ implements ExpresionZ {
             errores.reportar(linea, columna, "Variable no declarada: '" + nombre + "'");
             return TipoPrimitivo.DESCONOCIDO;
         }
-        // En Z solo las variables locales/parámetros exigen inicialización previa;
-        // un atributo puede leerse sin "inicializar" explícitamente (su init lo hace
-        // el constructor).
         if (!s.isInicializado() && s.getCategoria() == CategoriaSimbolo.VARIABLE) {
             errores.reportar(linea, columna, "Variable '" + nombre + "' usada sin inicializar");
         }
-        // Un atributo heredado se resuelve por nombre simple (ver AmbitoClase.resolver);
-        // si es private del padre no se puede usar desde la hija.
         if (s.getCategoria() == CategoriaSimbolo.ATRIBUTO) {
             Acceso.verificar(s, ambito, errores, linea, columna);
         }
         return s.getTipo();
     }
 
-    /**
-     * Dos casos según la categoría del símbolo:
-     *   ATRIBUTO: emite (=., this, nombre, t) y devuelve
-     *       temporal(t, tipo). Es un acceso implícito a "this.nombre".
-     *   VARIABLE / PARAMETRO / otro: comportamiento idéntico al de Y:
-     *       no emite nada y devuelve valor(nombre, tipo).
-     * Si el generador no tiene ámbito o el símbolo no se resuelve, cae al caso Y
-     * (devuelve valor(nombre, DESCONOCIDO)); es el comportamiento degradado
-     * cuando se genera C3D sin análisis semántico previo.
-     */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         Ambito ambito = generador.getAmbito();
@@ -80,11 +55,11 @@ public final class Identificador extends NodoZ implements ExpresionZ {
         if (categoria == CategoriaSimbolo.ATRIBUTO) {
             String t = generador.nuevoTemporal();
             String tipoStr = (tipo != null) ? tipo.nombre() : null;
-            generador.emitirCargaCampo("this", nombre, t, tipoStr);
+            boolean esPuntero = (tipo != null && tipo.esArreglo());
+            generador.emitirCargaCampo("this", nombre, t, tipoStr, esPuntero);
             return ResultadoC3D.temporal(t, tipo);
         }
 
-        // Variable local o parametro: usar nombre unico para evitar colisiones.
         String nombreC3D = (simb != null) ? simb.getNombreC3D() : nombre;
         return ResultadoC3D.valor(nombreC3D, tipo);
     }

@@ -47,23 +47,21 @@ public final class AccesoCampo extends NodoPigLatin implements ExpresionPigLatin
                     "'" + def.getNombre() + "' no tiene miembro '" + campo + "'");
             return TipoPrimitivo.DESCONOCIDO;
         }
-        // Encapsulamiento (solo afecta a clases de Z; los campos de estructuras de Y no tienen clase duena y siempre pasan).
         Acceso.verificar(m, ambito, errores, linea, columna);
         tipoCampo = m.getTipo();
         return tipoCampo;
     }
 
-    /**
-     * Emite: primero el C3D del objeto (queda su base en un temporal o nombre de
-     * variable), luego UNA cuádrupla (=., base, campo, t) con un temporal
-     * nuevo. Devuelve ResultadoC3D.temporal(t, tipoCampo).
-     */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         ResultadoC3D base = objeto.generarC3D(generador);
         String t = generador.nuevoTemporal();
         String tipoCampoStr = (tipoCampo != null) ? tipoCampo.nombre() : null;
-        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr);
+
+        // En PigLatin, todos los arreglos también son dinámicos.
+        boolean esPuntero = (tipoCampo != null && tipoCampo.esArreglo());
+
+        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr, esPuntero);
         Tipo tipo = (tipoCampo != null) ? tipoCampo : TipoPrimitivo.DESCONOCIDO;
         return ResultadoC3D.temporal(t, tipo);
     }

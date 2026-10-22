@@ -99,7 +99,9 @@ public final class Indice extends NodoZ implements ExpresionZ {
             for (ExpresionZ idx : indices) {
                 ResultadoC3D idxRes = idx.generarC3D(generador);
                 String t = generador.nuevoTemporal();
-                generador.emitirCargaIndice(lugarActual, idxRes.getLugar(), t);
+                String tipoStr = (tipoElemento != null) ? tipoElemento.nombre() : null;
+                // Pasamos tipoStr para que el backend RISC-V sepa si es float
+                generador.emitirCargaIndice(lugarActual, idxRes.getLugar(), t, tipoStr);
                 lugarActual = t;
             }
             Tipo tipo = (tipoElemento != null) ? tipoElemento : TipoPrimitivo.DESCONOCIDO;

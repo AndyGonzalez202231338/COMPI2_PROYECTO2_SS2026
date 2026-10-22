@@ -50,8 +50,6 @@ public final class Indice extends NodoY implements ExpresionY {
         return tipoElemento;
     }
 
-    // ========== AYUDANTES PARA APLANAMIENTO (FLATTENING) ==========
-
     public ExpresionY getBaseArray() {
         if (arreglo instanceof Indice parent) return parent.getBaseArray();
         return arreglo;
@@ -66,7 +64,6 @@ public final class Indice extends NodoY implements ExpresionY {
         return List.of(indice);
     }
 
-    // Genera la expresión C3D para el índice plano: i * dim2 + j
     public ResultadoC3D generarIndicePlano(GeneradorC3D generador) {
         List<ExpresionY> indices = getIndices();
         List<String> temps = new ArrayList<>();
@@ -99,7 +96,11 @@ public final class Indice extends NodoY implements ExpresionY {
         ResultadoC3D base = getBaseArray().generarC3D(generador);
         ResultadoC3D idxPlano = generarIndicePlano(generador);
         String t = generador.nuevoTemporal();
-        generador.emitirCargaIndice(base.getLugar(), idxPlano.getLugar(), t);
+
+        // FIX: Pasar el tipo de elemento al C3D
+        String tipoStr = (tipoElemento != null) ? tipoElemento.nombre() : null;
+        generador.emitirCargaIndice(base.getLugar(), idxPlano.getLugar(), t, tipoStr);
+
         Tipo tipo = (tipoElemento != null) ? tipoElemento : TipoPrimitivo.DESCONOCIDO;
         return ResultadoC3D.temporal(t, tipo);
     }

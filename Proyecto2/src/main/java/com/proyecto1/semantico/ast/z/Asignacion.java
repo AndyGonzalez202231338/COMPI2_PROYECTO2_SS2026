@@ -29,9 +29,6 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
-        // Con "=" el objetivo se ESCRIBE, no se lee: marcarlo inicializado ANTES de
-        // verificarlo evita el falso "usada sin inicializar" en "boolean x; x = false;".
-
         if (operador.equals("=") && objetivo instanceof Identificador idObj) {
             Simbolo sObj = ambito.resolver(idObj.getNombre());
             if (sObj != null) sObj.marcarInicializado();
@@ -58,26 +55,21 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
         if (operador.equals("=")) {
             ResultadoC3D rhs = valor.generarC3D(generador);
             guardarEn(lv, rhs.getLugar(), generador);
-            // El valor de la expresión "x = v" es v, con el tipo del lvalue.
             return ResultadoC3D.valor(rhs.getLugar(), lv.tipo());
         }
 
-        // Operador compuesto: leer, operar, guardar.
         ResultadoC3D actual = cargarDe(lv, generador);
         ResultadoC3D rhs    = valor.generarC3D(generador);
-        String opBin = operador.substring(0, operador.length() - 1); // "+=" -> "+"
+        String opBin = operador.substring(0, operador.length() - 1);
         String t = generador.nuevoTemporal();
         generador.emitirBinaria(opBin, actual.getLugar(), rhs.getLugar(), t);
         guardarEn(lv, t, generador);
         return ResultadoC3D.temporal(t, lv.tipo());
     }
 
-    // ---------- ayudantes privados ----------
-
     private record LValue(String base, String campo, String indice, Tipo tipo) {}
 
     private LValue resolverLValue(ExpresionZ objetivo, GeneradorC3D generador) {
-        // Caso 1 + 2: identificador simple (variable local, parámetro, o atributo).
         if (objetivo instanceof Identificador id) {
             String nombre = id.getNombre();
             Tipo tipo = TipoPrimitivo.DESCONOCIDO;
@@ -95,19 +87,16 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
             if (cat == CategoriaSimbolo.ATRIBUTO) {
                 return new LValue("this", nombre, null, tipo);
             }
-            // Variable local o parametro: usar el nombre unico para evitar colisiones.
             String nombreC3D = (simb != null) ? simb.getNombreC3D() : nombre;
             return new LValue(nombreC3D, null, null, tipo);
         }
 
-        // Caso 3: obj.campo
         if (objetivo instanceof AccesoCampo ac) {
             ResultadoC3D base = ac.getObjeto().generarC3D(generador);
             Tipo tipo = (ac.getTipoCampo() != null) ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
             return new LValue(base.getLugar(), ac.getCampo(), null, tipo);
         }
 
-        // Caso 4: arr[i]
         if (objetivo instanceof Indice ind) {
             ResultadoC3D base = ind.getArreglo().generarC3D(generador);
             ResultadoC3D idx  = ind.getIndice().generarC3D(generador);
@@ -123,7 +112,8 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
         if (lv.campo() != null) {
             String t = generador.nuevoTemporal();
             String tipoStr = (lv.tipo() != null) ? lv.tipo().nombre() : null;
-            generador.emitirCargaCampo(lv.base(), lv.campo(), t, tipoStr);
+            boolean esPuntero = (lv.tipo() != null && lv.tipo().esArreglo());
+            generador.emitirCargaCampo(lv.base(), lv.campo(), t, tipoStr, esPuntero);
             return ResultadoC3D.temporal(t, lv.tipo());
         }
         if (lv.indice() != null) {
