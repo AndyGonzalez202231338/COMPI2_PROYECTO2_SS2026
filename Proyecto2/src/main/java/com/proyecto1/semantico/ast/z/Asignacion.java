@@ -122,7 +122,8 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
     private ResultadoC3D cargarDe(LValue lv, GeneradorC3D generador) {
         if (lv.campo() != null) {
             String t = generador.nuevoTemporal();
-            generador.emitirCargaCampo(lv.base(), lv.campo(), t);
+            String tipoStr = (lv.tipo() != null) ? lv.tipo().nombre() : null;
+            generador.emitirCargaCampo(lv.base(), lv.campo(), t, tipoStr);
             return ResultadoC3D.temporal(t, lv.tipo());
         }
         if (lv.indice() != null) {

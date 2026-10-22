@@ -79,7 +79,8 @@ public final class Identificador extends NodoZ implements ExpresionZ {
 
         if (categoria == CategoriaSimbolo.ATRIBUTO) {
             String t = generador.nuevoTemporal();
-            generador.emitirCargaCampo("this", nombre, t);
+            String tipoStr = (tipo != null) ? tipo.nombre() : null;
+            generador.emitirCargaCampo("this", nombre, t, tipoStr);
             return ResultadoC3D.temporal(t, tipo);
         }
 
