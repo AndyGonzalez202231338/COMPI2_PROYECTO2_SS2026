@@ -47,24 +47,16 @@ public final class AccesoCampo extends NodoY implements ExpresionY {
         return tipoCampo;
     }
 
-    /**
-     * Emite: primero el C3D del objeto (queda su "base" en un temporal o nombre de
-     * variable), luego (=., base, campo, t) con un temporal nuevo.
-     * Devuelve temporal(t, tipoCampo) — si el campo es a su vez una estructura,
-     * el temporal es una referencia a estructura (Fase 4 lo declara como tal).
-     *
-     * El nombre del campo viaja tal cual en la cuádrupla (no como offset): el cálculo
-     * base+offset con el layout real lo hará Fase 4, que es la que conoce los sizeof.
-     *
-     * Encadenamiento "a.b.c": funciona porque el objeto de un AccesoCampo externo puede
-     * ser otro AccesoCampo; el interno emite "t0 = a.b" y el externo emite "t1 = t0.c".
-     */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         ResultadoC3D base = objeto.generarC3D(generador);
         String t = generador.nuevoTemporal();
         String tipoCampoStr = (tipoCampo != null) ? tipoCampo.nombre() : null;
-        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr);
+
+        // En Y, todos los arreglos son dinámicos (punteros en el heap).
+        boolean esPuntero = (tipoCampo != null && tipoCampo.esArreglo());
+
+        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr, esPuntero);
         Tipo tipo = (tipoCampo != null) ? tipoCampo : TipoPrimitivo.DESCONOCIDO;
         return ResultadoC3D.temporal(t, tipo);
     }

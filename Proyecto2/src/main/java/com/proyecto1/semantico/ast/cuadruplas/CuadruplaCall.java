@@ -1,15 +1,20 @@
 package com.proyecto1.semantico.ast.cuadruplas;
 
-/**
- * destino = call funcion(nArgs argumentos). "funcion" ya viene con el
- * mangling resuelto (p. ej. "Persona_calcularEdad", "Persona_init_a2"). "destino"
- * puede ser null si no se usa el valor de retorno. nArgs es SIEMPRE conocido en
- * tiempo de generación de C3D (es argumentos.size()), por eso es int y no String.
- */
-public record CuadruplaCall(String funcion, int nArgs, String destino) implements Cuadrupla {
+// destino = call funcion(nArgs argumentos). "funcion" ya viene con el mangling resuelto.
+// "destino" puede ser null si no se usa el valor de retorno.
+// tipoRetorno es opcional: "flotante", "entero", "cadena", etc. Si es null el backend
+// trata el retorno como entero.
+public record CuadruplaCall(String funcion, int nArgs, String destino, String tipoRetorno) implements Cuadrupla {
+
+    // Compatibilidad: sin tipo de retorno.
+    public CuadruplaCall(String funcion, int nArgs, String destino) {
+        this(funcion, nArgs, destino, null);
+    }
+
     @Override
     public String toStringLegible() {
-        return "call " + funcion + ", " + nArgs + (destino != null ? " -> " + destino : "");
+        String base = "call " + funcion + ", " + nArgs + (destino != null ? " -> " + destino : "");
+        return tipoRetorno != null ? base + "  [" + tipoRetorno + "]" : base;
     }
 
     @Override
