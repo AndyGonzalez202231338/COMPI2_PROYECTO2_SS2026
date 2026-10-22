@@ -194,17 +194,18 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
         // Emitir la llamada con la etiqueta correcta según el caso.
         if (objetivo instanceof Identificador id) {
             for (String lugar : lugaresArgs) generador.emitirParam(lugar);
+            String tipoRet = (simboloResuelto != null && simboloResuelto.getTipo() != null)
+                    ? simboloResuelto.getTipo().nombre() : null;
             if (esVoid) {
-                generador.emitirCall(id.getNombre(), argumentos.size(), null);
+                generador.emitirCall(id.getNombre(), argumentos.size(), null, tipoRet);
                 return ResultadoC3D.vacio();
             }
             String t = generador.nuevoTemporal();
-            generador.emitirCall(id.getNombre(), argumentos.size(), t);
+            generador.emitirCall(id.getNombre(), argumentos.size(), t, tipoRet);
             return ResultadoC3D.temporal(t, tipoRetorno);
         }
 
         // Caso "obj.m(args)": receptor ya evaluado, +1 al número de argumentos.
-        // Caso "obj.m(args)": receptor ya evaluado, +1 al numero de argumentos.
         if (objetivo instanceof AccesoCampo ac) {
             String clase = (nombreClaseObjetivo != null) ? nombreClaseObjetivo : "?";
             List<com.proyecto1.semantico.tipos.Tipo> tiposFormales = new java.util.ArrayList<>();
@@ -234,7 +235,9 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
             // Call directo: nadie sobreescribe o no es virtual.
             generador.emitirParam(receptor);
             for (String lugar : lugaresArgs) generador.emitirParam(lugar);
-            generador.emitirCall(etiqueta, argumentos.size() + 1, resultado);
+            String tipoRet = (simboloResuelto != null && simboloResuelto.getTipo() != null)
+                    ? simboloResuelto.getTipo().nombre() : null;
+            generador.emitirCall(etiqueta, argumentos.size() + 1, resultado, tipoRet);
             return (resultado == null)
                     ? ResultadoC3D.vacio()
                     : ResultadoC3D.temporal(resultado, tipoRetorno);
@@ -262,19 +265,21 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
         }
 
         String fin = generador.nuevaEtiqueta();
+        String tipoRet = (simboloResuelto != null && simboloResuelto.getTipo() != null)
+                ? simboloResuelto.getTipo().nombre() : null;
 
         // Caso por defecto
         generador.emitirParam(receptor);
         for (String lugar : lugaresArgs) generador.emitirParam(lugar);
-        generador.emitirCall(etiquetaPorDefecto, nArgs, resultado);
+        generador.emitirCall(etiquetaPorDefecto, nArgs, resultado, tipoRet);
         generador.emitirGoto(fin);
 
-        // Casos alternativos
+        // Casos alternativos: cada uno llama a SU etiqueta (caso.getKey()).
         for (java.util.Map.Entry<String, String> caso : casoPorFuncion.entrySet()) {
             generador.emitirEtiqueta(caso.getValue());
             generador.emitirParam(receptor);
             for (String lugar : lugaresArgs) generador.emitirParam(lugar);
-            generador.emitirCall(caso.getKey(), nArgs, resultado);
+            generador.emitirCall(caso.getKey(), nArgs, resultado, tipoRet);
             generador.emitirGoto(fin);
         }
 

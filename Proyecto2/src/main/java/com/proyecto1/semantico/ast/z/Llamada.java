@@ -272,21 +272,22 @@ public final class Llamada extends NodoZ implements ExpresionZ {
         for (GeneradorC3D.EntradaDispatch e : entradas) {
             if (e.etiqueta().equals(etiquetaPorDefecto)) continue;
             String caso = casoPorFuncion.computeIfAbsent(e.etiqueta(), k -> generador.nuevaEtiqueta());
-
             String cmp = generador.nuevoTemporal();
             generador.emitirBinaria("==", classId, String.valueOf(e.classId()), cmp);
             generador.emitirIfTrue(cmp, caso);
         }
 
         String fin = generador.nuevaEtiqueta();
-
         String tipoRet = (simboloMetodo != null && simboloMetodo.getTipo() != null)
                 ? simboloMetodo.getTipo().nombre() : null;
 
+        // Caso por defecto
         emitirParams(generador, receptor, lugaresArgs);
         generador.emitirCall(etiquetaPorDefecto, nArgs, resultado, tipoRet);
         generador.emitirGoto(fin);
 
+        // Casos alternativos: cada uno llama a SU etiqueta (caso.getKey()),
+        // no a la del default.
         for (Map.Entry<String, String> caso : casoPorFuncion.entrySet()) {
             generador.emitirEtiqueta(caso.getValue());
             emitirParams(generador, receptor, lugaresArgs);

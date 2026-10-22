@@ -64,38 +64,73 @@ public final class CargadorImports {
 
         File carpetaDelPig = archivoPig.getAbsoluteFile().getParentFile();
 
+        // DOS PASADAS: primero .z (clases), luego .y (funciones/estructuras).
+        // Sin esto, un .y que recibe un objeto Z por referencia ({} Producto)
+        // no encuentra la clase: su analisis corre con un ambito fresco que
+        // no incluye las clases de Z.
+        List<Importacion> importsZ = new ArrayList<>();
+        List<Importacion> importsY = new ArrayList<>();
         for (Importacion imp : importaciones) {
-            String nombreImport = String.join(".", imp.getSegmentos());
-
-            // "import Utilidades.y": el ultimo segmento es la extension, no una subcarpeta.
-            List<String> segmentos = imp.getSegmentos();
-            String[] extensiones = EXTENSIONES;
-            if (segmentos.size() > 1 && esExtension(segmentos.get(segmentos.size() - 1))) {
-                extensiones = new String[] {segmentos.get(segmentos.size() - 1).toLowerCase()};
-                segmentos = segmentos.subList(0, segmentos.size() - 1);
-            }
-
-            List<File> archivos = localizar(segmentos, extensiones, carpetaDelPig);
-
-            if (archivos.isEmpty()) {
-                String ultimo = segmentos.get(segmentos.size() - 1);
-                StringBuilder buscados = new StringBuilder();
-                for (String ext : extensiones) {
-                    if (buscados.length() > 0) buscados.append(" y ");
-                    buscados.append(ultimo).append('.').append(ext);
-                }
-                errores.add(new ErrorSemantico(imp.getLinea(), imp.getColumna(),
-                        "No se encontró el archivo importado '" + nombreImport + "' (se buscó "
-                                + buscados + " junto al archivo .pig y en el proyecto)."));
-                continue;
-            }
-            for (File archivo : archivos) {
-                Path clave = archivo.toPath().toAbsolutePath().normalize();
-                if (!yaCargados.add(clave)) continue; // el mismo archivo importado dos veces: se carga una sola
-                incorporar(archivo, imp, combinado, archivoDeCadaSimbolo, errores, advertencias);
+            List<String> segs = imp.getSegmentos();
+            String ultimo = segs.get(segs.size() - 1).toLowerCase();
+            if (ultimo.equals("z")) {
+                importsZ.add(imp);
+            } else {
+                importsY.add(imp);
             }
         }
+
+        // Primera pasada: .z
+        for (Importacion imp : importsZ) {
+            procesarUnImport(imp, combinado, archivoDeCadaSimbolo, errores,
+                    advertencias, yaCargados, carpetaDelPig);
+        }
+
+        // Hacer visibles las clases Z al analisis de los .y que vienen despues.
+        ServicioAnalisis.setClasesExternasParaY(combinado);
+
+        // Segunda pasada: .y (y cualquier otra extension)
+        for (Importacion imp : importsY) {
+            procesarUnImport(imp, combinado, archivoDeCadaSimbolo, errores,
+                    advertencias, yaCargados, carpetaDelPig);
+        }
+
+        // Limpiar para no contaminar otros analisis.
+        ServicioAnalisis.setClasesExternasParaY(null);
+
         return new Resultado(combinado, errores, advertencias);
+    }
+
+    private void procesarUnImport(Importacion imp, AmbitoGlobal combinado,
+                                  Map<String, String> archivoDeCadaSimbolo,
+                                  List<ErrorSemantico> errores, List<ErrorSemantico> advertencias,
+                                  Set<Path> yaCargados, File carpetaDelPig) {
+        String nombreImport = String.join(".", imp.getSegmentos());
+        List<String> segmentos = imp.getSegmentos();
+        String[] extensiones = EXTENSIONES;
+        if (segmentos.size() > 1 && esExtension(segmentos.get(segmentos.size() - 1))) {
+            extensiones = new String[] {segmentos.get(segmentos.size() - 1).toLowerCase()};
+            segmentos = segmentos.subList(0, segmentos.size() - 1);
+        }
+
+        List<File> archivos = localizar(segmentos, extensiones, carpetaDelPig);
+        if (archivos.isEmpty()) {
+            String ultimo = segmentos.get(segmentos.size() - 1);
+            StringBuilder buscados = new StringBuilder();
+            for (String ext : extensiones) {
+                if (buscados.length() > 0) buscados.append(" y ");
+                buscados.append(ultimo).append('.').append(ext);
+            }
+            errores.add(new ErrorSemantico(imp.getLinea(), imp.getColumna(),
+                    "No se encontró el archivo importado '" + nombreImport + "' (se buscó "
+                            + buscados + " junto al archivo .pig y en el proyecto)."));
+            return;
+        }
+        for (File archivo : archivos) {
+            Path clave = archivo.toPath().toAbsolutePath().normalize();
+            if (!yaCargados.add(clave)) continue;
+            incorporar(archivo, imp, combinado, archivoDeCadaSimbolo, errores, advertencias);
+        }
     }
 
     /** Analiza un archivo importado y vuelca sus símbolos en el ámbito combinado. */
@@ -124,9 +159,16 @@ public final class CargadorImports {
 
         for (Simbolo simbolo : global.simbolosLocales()) {
             Simbolo previo = combinado.resolverLocal(simbolo.getNombre());
+
             if (previo == null) {
                 combinado.declarar(simbolo);
                 archivoDeCadaSimbolo.put(simbolo.getNombre(), archivo.getName());
+                continue;
+            }
+
+            // FIX: Si el símbolo ya existe y ambos son CLASE, significa que lo inyectamos
+            // previamente para que el .y pudiera compilar. Lo ignoramos silenciosamente.
+            if (previo.getCategoria() == CategoriaSimbolo.CLASE && simbolo.getCategoria() == CategoriaSimbolo.CLASE) {
                 continue;
             }
 
@@ -136,9 +178,6 @@ public final class CargadorImports {
                             || (previo.getCategoria() == CategoriaSimbolo.CLASE && simbolo.getCategoria() == CategoriaSimbolo.ESTRUCTURA);
 
             if (estructuraYClase) {
-                // Una estructura de un .y y una clase de un .z con el mismo nombre NO es un error:
-                // en el .pig gana la clase (es la unica que se puede instanciar con "novus X(...)"
-                // y que tiene metodos). La estructura sigue funcionando dentro de su propio .y.
                 boolean nuevoEsClase = simbolo.getCategoria() == CategoriaSimbolo.CLASE;
                 String archivoEstructura = nuevoEsClase ? archivoPrevio : archivo.getName();
                 String archivoClase = nuevoEsClase ? archivo.getName() : archivoPrevio;
