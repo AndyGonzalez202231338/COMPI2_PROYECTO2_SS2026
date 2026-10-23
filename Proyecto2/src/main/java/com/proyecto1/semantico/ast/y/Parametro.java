@@ -1,28 +1,24 @@
 package com.proyecto1.semantico.ast.y;
+
 import com.proyecto1.semantico.errores.ManejadorErrores;
 import com.proyecto1.semantico.tabla.Ambito;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
 import com.proyecto1.semantico.tipos.TipoArreglo;
+import com.proyecto1.semantico.tipos.TipoClase;
 import com.proyecto1.semantico.tipos.TipoEstructura;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
-/**
- * Un parametro. Las tres alternativas de la gramática (#parametroPrimitivo,
- * #parametroArreglo, #parametroEstructura) se representan con esta única clase + su
- * CategoriaParametro, construida siempre a través de una de las tres fábricas
- * estáticas de abajo (así queda imposible construir, por ejemplo, un parámetro
- * ESTRUCTURA sin nombreTipoEstructura).
- */
+
 public final class Parametro extends NodoY {
 
     private final CategoriaParametro categoria;
-    private final NodoTipoRef tipo;             // tipo del valor (PRIMITIVO) o del elemento (ARREGLO)
-    private final String nombreTipoEstructura;  // solo si categoria == ESTRUCTURA (el primer ID: "{} Persona p")
-    private final String nombre;                // nombre del parámetro
+    private final NodoTipoRef tipo;
+    private final String nombreTipoEstructura;
+    private final String nombre;
 
     private Parametro(CategoriaParametro categoria, NodoTipoRef tipo, String nombreTipoEstructura,
-                       String nombre, int linea, int columna) {
+                      String nombre, int linea, int columna) {
         super(linea, columna);
         this.categoria = categoria;
         this.tipo = tipo;
@@ -53,10 +49,13 @@ public final class Parametro extends NodoY {
             case ARREGLO   -> new TipoArreglo(tipo.resolver(ambito, errores));
             case ESTRUCTURA -> {
                 Simbolo s = ambito.ambitoGlobal().resolverLocal(nombreTipoEstructura);
-                if (s == null || s.getCategoria() != CategoriaSimbolo.ESTRUCTURA) {
-                    errores.reportar(linea, columna,
-                            "Estructura desconocida: '" + nombreTipoEstructura + "'");
+                // FIX: aceptar también CategoriaSimbolo.CLASE
+                if (s == null || (s.getCategoria() != CategoriaSimbolo.ESTRUCTURA && s.getCategoria() != CategoriaSimbolo.CLASE)) {
+                    errores.reportar(linea, columna, "Estructura desconocida: '" + nombreTipoEstructura + "'");
                     yield TipoPrimitivo.DESCONOCIDO;
+                }
+                if (s.getCategoria() == CategoriaSimbolo.CLASE) {
+                    yield new TipoClase(s);
                 }
                 yield new TipoEstructura(s);
             }

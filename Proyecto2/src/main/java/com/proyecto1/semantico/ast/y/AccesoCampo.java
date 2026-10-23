@@ -6,6 +6,7 @@ import com.proyecto1.semantico.errores.ManejadorErrores;
 import com.proyecto1.semantico.tabla.Ambito;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
+import com.proyecto1.semantico.tipos.TipoClase;
 import com.proyecto1.semantico.tipos.TipoEstructura;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
 
@@ -15,7 +16,6 @@ public final class AccesoCampo extends NodoY implements ExpresionY {
     private final ExpresionY objeto;
     private final String campo;
 
-    /** Tipo del campo, cacheado por verificar() para que generarC3D no lo recalcule. */
     private Tipo tipoCampo;
 
     public AccesoCampo(ExpresionY objeto, String campo, int linea, int columna) {
@@ -31,16 +31,24 @@ public final class AccesoCampo extends NodoY implements ExpresionY {
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         Tipo tObj = objeto.verificar(ambito, errores);
-        if (!(tObj instanceof TipoEstructura te)) {
+        Simbolo def;
+
+        // FIX: aceptar Estructura (Y) o Clase (Z)
+        if (tObj instanceof TipoEstructura te) {
+            def = te.getDefinicion();
+        } else if (tObj instanceof TipoClase tc) {
+            def = tc.getDefinicion();
+        } else {
             if (!tObj.esDesconocido())
                 errores.reportar(linea, columna,
                         "No se puede acceder a '" + campo + "' en tipo " + tObj.nombre());
             return TipoPrimitivo.DESCONOCIDO;
         }
-        Simbolo campoSim = te.getDefinicion().buscarMiembro(campo);
+
+        Simbolo campoSim = def.buscarMiembro(campo);
         if (campoSim == null) {
             errores.reportar(linea, columna,
-                    "La estructura '" + te.nombre() + "' no tiene campo '" + campo + "'");
+                    "'" + def.getNombre() + "' no tiene miembro '" + campo + "'");
             return TipoPrimitivo.DESCONOCIDO;
         }
         tipoCampo = campoSim.getTipo();
@@ -53,7 +61,6 @@ public final class AccesoCampo extends NodoY implements ExpresionY {
         String t = generador.nuevoTemporal();
         String tipoCampoStr = (tipoCampo != null) ? tipoCampo.nombre() : null;
 
-        // En Y, todos los arreglos son dinámicos (punteros en el heap).
         boolean esPuntero = (tipoCampo != null && tipoCampo.esArreglo());
 
         generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr, esPuntero);

@@ -80,6 +80,16 @@ public class ServicioAnalisis {
     // .y o .z suelto (sin un .pig de por medio).
     private static final ThreadLocal<Boolean> analizandoPig = ThreadLocal.withInitial(() -> false);
 
+    // Clases de Z ya cargadas, para que un .y importado despues pueda resolver
+    // tipos como "{} Producto" (una clase Z usada como parametro por referencia).
+    // Se llena en CargadorImports despues de procesar todos los .z, y se lee en
+    // analizarY para inyectar esas clases al ambito del .y.
+    private static final ThreadLocal<AmbitoGlobal> clasesExternasParaY = ThreadLocal.withInitial(() -> null);
+
+    public static void setClasesExternasParaY(AmbitoGlobal ambito) {
+        clasesExternasParaY.set(ambito);
+    }
+
     // Backend pedido por el .pig que se esta analizando ahora mismo (null si no hay
     // ninguno en curso). Lo consultan analizarY/analizarZ para decidir si, mientras son
     // importados por ese .pig, deben escribir su propio .c (hace falta para que gcc
@@ -159,6 +169,16 @@ public class ServicioAnalisis {
         if (!listener.tieneErrores()) {
             com.proyecto1.semantico.ast.y.Programa programa = new ASTBuilderY().construir(arbol);
             ambitoGlobal = new AmbitoGlobal();
+            // Si un .pig esta importando este .y Y ya cargo clases de Z antes,
+            // inyectarlas al ambito para que "{} Producto" resuelva correctamente.
+            AmbitoGlobal externas = clasesExternasParaY.get();
+            if (externas != null) {
+                for (Simbolo sExt : externas.simbolosLocales()) {
+                    if (sExt.getCategoria() == CategoriaSimbolo.CLASE) {
+                        ambitoGlobal.declarar(sExt);
+                    }
+                }
+            }
             ManejadorErrores errores = new AnalizadorSemanticoY().analizar(programa, ambitoGlobal);
             erroresSemanticos = errores.obtenerErrores();
 

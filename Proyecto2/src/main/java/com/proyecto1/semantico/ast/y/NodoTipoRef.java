@@ -5,6 +5,7 @@ import com.proyecto1.semantico.tabla.Ambito;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
+import com.proyecto1.semantico.tipos.TipoClase;
 import com.proyecto1.semantico.tipos.TipoEstructura;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
 
@@ -19,7 +20,7 @@ import com.proyecto1.semantico.tipos.TipoPrimitivo;
  */
 public final class NodoTipoRef extends NodoY {
 
-    private final String nombre;      // "entero" | "flotante" | "caracter" | "cadena" | "bool" | <ID de estructura>
+    private final String nombre;      // "entero" | "flotante" | "caracter" | "cadena" | "bool" | <ID de estructura o clase>
     private final boolean esPrimitivo;
 
     public NodoTipoRef(String nombre, boolean esPrimitivo, int linea, int columna) {
@@ -46,11 +47,16 @@ public final class NodoTipoRef extends NodoY {
                 default -> TipoPrimitivo.DESCONOCIDO;
             };
         }
-        // Es un nombre de estructura: buscar en el ámbito global
+
+        // FIX: buscar en el ámbito global y aceptar tanto ESTRUCTURA (Y) como CLASE (Z)
         Simbolo s = ambito.ambitoGlobal().resolverLocal(nombre);
-        if (s == null || s.getCategoria() != CategoriaSimbolo.ESTRUCTURA) {
+        if (s == null || (s.getCategoria() != CategoriaSimbolo.ESTRUCTURA && s.getCategoria() != CategoriaSimbolo.CLASE)) {
             errores.reportar(linea, columna, "Tipo desconocido: '" + nombre + "'");
             return TipoPrimitivo.DESCONOCIDO;
+        }
+
+        if (s.getCategoria() == CategoriaSimbolo.CLASE) {
+            return new TipoClase(s);
         }
         return new TipoEstructura(s);
     }
