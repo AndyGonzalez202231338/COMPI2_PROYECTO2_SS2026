@@ -21,6 +21,7 @@ public final class Per extends NodoPigLatin implements InstruccionPigLatin {
     private final ExpresionPigLatin condicion;        // null si se omitió
     private final InstruccionPigLatin actualizacion;  // ListaExpresiones | null
     private final Bloque cuerpo;
+    private Ambito ambitoCiclo;
 
     public Per(InstruccionPigLatin inicializacion, ExpresionPigLatin condicion,
                InstruccionPigLatin actualizacion, Bloque cuerpo, int linea, int columna) {
@@ -39,6 +40,7 @@ public final class Per extends NodoPigLatin implements InstruccionPigLatin {
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         AmbitoBloque ambCiclo = new AmbitoBloque(ambito, true);
+        this.ambitoCiclo = ambCiclo;
         if (inicializacion != null) inicializacion.verificar(ambCiclo, errores);
         if (condicion != null) {
             Tipo tc = condicion.verificar(ambCiclo, errores);
@@ -72,6 +74,11 @@ public final class Per extends NodoPigLatin implements InstruccionPigLatin {
      */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
+        Ambito ambitoAnterior = null;
+        if (ambitoCiclo != null) {
+            ambitoAnterior = generador.entrarAmbito(ambitoCiclo);
+        }
+
         String inicio = generador.nuevaEtiqueta();
         String act    = generador.nuevaEtiqueta();
         String fin    = generador.nuevaEtiqueta();
@@ -98,6 +105,11 @@ public final class Per extends NodoPigLatin implements InstruccionPigLatin {
 
         generador.emitirGoto(inicio);
         generador.emitirEtiqueta(fin);
+
+        if (ambitoAnterior != null) {
+            generador.salirAmbito(ambitoAnterior);
+        }
+
         return ResultadoC3D.vacio();
     }
 }
