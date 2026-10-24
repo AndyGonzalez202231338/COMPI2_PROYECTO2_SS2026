@@ -18,6 +18,7 @@ import com.proyecto1.semantico.tipos.TipoPrimitivo;
 public final class Leer extends NodoPigLatin implements InstruccionPigLatin {
 
     private final String variable; // null si no se especificó el ID
+    private Tipo tipoCache;        // tipo de la variable destino, resuelto en verificar()
 
     public Leer(String variable, int linea, int columna) {
         super(linea, columna);
@@ -34,8 +35,10 @@ public final class Leer extends NodoPigLatin implements InstruccionPigLatin {
             Simbolo s = ambito.resolver(variable);
             if (s == null)
                 errores.reportar(linea, columna, "Variable no declarada: '" + variable + "'");
-            else
+            else {
                 s.marcarInicializado();
+                this.tipoCache = s.getTipo();
+            }
         }
         return TipoPrimitivo.VOID;
     }
@@ -48,11 +51,12 @@ public final class Leer extends NodoPigLatin implements InstruccionPigLatin {
      */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
+        String tipoStr = (tipoCache != null) ? tipoCache.nombre() : "cadena";
         if (variable != null) {
-            generador.emitirRead(variable);
+            generador.emitirRead(variable, tipoStr);
         } else {
             String t = generador.nuevoTemporal();
-            generador.emitirRead(t);
+            generador.emitirRead(t, tipoStr);
         }
         return ResultadoC3D.vacio();
     }

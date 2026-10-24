@@ -176,12 +176,18 @@ public final class TraductorCuadruplaRiscV {
 
     private void traducirIfTrue(CuadruplaIfTrue q, StringBuilder sb) {
         cargar(q.condicion(), "t0", sb);
-        sb.append("    bnez t0, ").append(etiqueta(q.etiqueta())).append("\n");
+        String siguiente = etiquetaInterna("if_true_cont");
+        sb.append("    beqz t0, ").append(siguiente).append("\n");
+        sb.append("    j ").append(etiqueta(q.etiqueta())).append("\n");
+        sb.append(siguiente).append(":\n");
     }
 
     private void traducirIfFalse(CuadruplaIfFalse q, StringBuilder sb) {
         cargar(q.condicion(), "t0", sb);
-        sb.append("    beqz t0, ").append(etiqueta(q.etiqueta())).append("\n");
+        String siguiente = etiquetaInterna("if_false_cont");
+        sb.append("    bnez t0, ").append(siguiente).append("\n");
+        sb.append("    j ").append(etiqueta(q.etiqueta())).append("\n");
+        sb.append(siguiente).append(":\n");
     }
 
     private void traducirParam(CuadruplaParam q, StringBuilder sb) {
@@ -361,10 +367,42 @@ public final class TraductorCuadruplaRiscV {
         return "entero";
     }
 
+    // read destino: el ecall de RARS depende del tipo que se esta leyendo.
+    //   entero   -> ecall 5, resultado en a0
+    //   flotante -> ecall 6, resultado en fa0
+    //   cadena   -> ecall 8, necesita un buffer (se reserva en el heap) y un
+    //               tamano maximo; RARS escribe ahi los bytes leidos + '\0'.
+    //   caracter -> ecall 12, resultado en a0 (codigo ASCII)
     private void traducirRead(CuadruplaRead q, StringBuilder sb) {
-        sb.append("    li a7, 5\n");
-        sb.append("    ecall\n");
-        guardar("a0", q.destino(), sb);
+        String tipo = q.tipo();
+        if ("flotante".equals(tipo)) {
+            sb.append("    li a7, 6\n");
+            sb.append("    ecall\n");
+            guardarFloat("fa0", q.destino(), sb);
+            marcarFlotante(q.destino());
+        } else if ("cadena".equals(tipo)) {
+            // Reservar un buffer de 256 bytes en el heap para la cadena leida.
+            sb.append("    la t1, heap_ptr\n");
+            sb.append("    lw a0, 0(t1)\n");      // a0 = direccion del buffer (heap_ptr actual)
+            sb.append("    li a1, 256\n");         // tamano maximo del buffer
+            sb.append("    li a7, 8\n");
+            sb.append("    ecall\n");
+            // Avanzar heap_ptr 256 bytes (alineado) para la siguiente reserva.
+            sb.append("    lw t2, 0(t1)\n");
+            sb.append("    addi t2, t2, 256\n");
+            sb.append("    sw t2, 0(t1)\n");
+            // El resultado (direccion del buffer) queda en a0 (RARS no lo cambia).
+            guardar("a0", q.destino(), sb);
+        } else if ("caracter".equals(tipo)) {
+            sb.append("    li a7, 12\n");
+            sb.append("    ecall\n");
+            guardar("a0", q.destino(), sb);
+        } else {
+            // entero (o tipo desconocido: se asume entero)
+            sb.append("    li a7, 5\n");
+            sb.append("    ecall\n");
+            guardar("a0", q.destino(), sb);
+        }
     }
 
     private void emitirReservaHeap(StringBuilder sb) {

@@ -23,6 +23,7 @@ public final class Para extends NodoZ implements InstruccionZ {
     private final ExpresionZ condicion;
     private final List<ExpresionZ> actualizacion;
     private final InstruccionZ cuerpo;
+    private Ambito ambitoCiclo;
 
     public Para(DeclaracionVariable inicializacionDeclaracion, List<ExpresionZ> inicializacionExpresiones,
                 ExpresionZ condicion, List<ExpresionZ> actualizacion, InstruccionZ cuerpo,
@@ -35,16 +36,30 @@ public final class Para extends NodoZ implements InstruccionZ {
         this.cuerpo = cuerpo;
     }
 
-    public DeclaracionVariable getInicializacionDeclaracion() { return inicializacionDeclaracion; }
-    public List<ExpresionZ> getInicializacionExpresiones()    { return inicializacionExpresiones; }
-    public ExpresionZ getCondicion()                          { return condicion; }
-    public List<ExpresionZ> getActualizacion()                { return actualizacion; }
-    public InstruccionZ getCuerpo()                           { return cuerpo; }
+    public DeclaracionVariable getInicializacionDeclaracion() {
+        return inicializacionDeclaracion;
+    }
+
+    public List<ExpresionZ> getInicializacionExpresiones() {
+        return inicializacionExpresiones;
+    }
+
+    public ExpresionZ getCondicion() {
+        return condicion;
+    }
+
+    public List<ExpresionZ> getActualizacion() {
+        return actualizacion;
+    }
+
+    public InstruccionZ getCuerpo() {
+        return cuerpo;
+    }
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         AmbitoBloque ambCiclo = new AmbitoBloque(ambito, true);
-
+        this.ambitoCiclo = ambCiclo;
         if (inicializacionDeclaracion != null)
             inicializacionDeclaracion.verificar(ambCiclo, errores);
         if (inicializacionExpresiones != null)
@@ -65,15 +80,15 @@ public final class Para extends NodoZ implements InstruccionZ {
     }
 
     /**
-     *   [init]                (declaración o lista de expresiones, una sola vez)
-     *   L_inicio:
-     *   [cond?]
-     *   if_false c goto L_fin
-     *   [cuerpo]              (dentro de entrarCiclo/salirCiclo)
-     *   L_act:
-     *   [act]                 (lista de expresiones, en orden)
-     *   goto L_inicio
-     *   L_fin:
+     * [init]                (declaración o lista de expresiones, una sola vez)
+     * L_inicio:
+     * [cond?]
+     * if_false c goto L_fin
+     * [cuerpo]              (dentro de entrarCiclo/salirCiclo)
+     * L_act:
+     * [act]                 (lista de expresiones, en orden)
+     * goto L_inicio
+     * L_fin:
      * El ciclo se registra como entrarCiclo(L_act, L_fin): "continue" salta a
      * L_act (así se ejecuta la actualización, evitando ciclos infinitos) y "break" a
      * L_fin sin pasar por L_act. Sin condición no se emite if_false (solo termina con
@@ -81,11 +96,20 @@ public final class Para extends NodoZ implements InstruccionZ {
      */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
-        String inicio = generador.nuevaEtiqueta();
-        String act    = generador.nuevaEtiqueta();
-        String fin    = generador.nuevaEtiqueta();
+        // Activar el ambito de ESTE "for" antes de emitir nada: sin esto, el
+        // inicializador/condicion/actualizacion resuelven nombres en el ambito
+        // exterior (donde la variable del ciclo no existe o es la de otro
+        // "for" ya terminado), y cualquier "for" que no sea el primero en
+        // reusar un nombre termina leyendo/escribiendo el slot equivocado.
+        Ambito ambitoAnterior = null;
+        if (ambitoCiclo != null) {
+            ambitoAnterior = generador.entrarAmbito(ambitoCiclo);
+        }
 
-        // Init: solo una de las dos variantes es no-null.
+        String inicio = generador.nuevaEtiqueta();
+        String act = generador.nuevaEtiqueta();
+        String fin = generador.nuevaEtiqueta();
+
         if (inicializacionDeclaracion != null) {
             inicializacionDeclaracion.generarC3D(generador);
         } else if (inicializacionExpresiones != null) {
@@ -114,6 +138,11 @@ public final class Para extends NodoZ implements InstruccionZ {
 
         generador.emitirGoto(inicio);
         generador.emitirEtiqueta(fin);
+
+        if (ambitoAnterior != null) {
+            generador.salirAmbito(ambitoAnterior);
+        }
+
         return ResultadoC3D.vacio();
     }
 }
