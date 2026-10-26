@@ -163,7 +163,7 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
     }
 
 
-    private record LValue(String base, String campo, String indice, Tipo tipo) {}
+    private record LValue(String base, String campo, String indice, Tipo tipo, String claseObjeto) {}
 
     private LValue resolverLValue(ExpresionPigLatin objetivo, GeneradorC3D generador) {
         // Caso 1: identificador simple (variable local o parámetro).
@@ -180,7 +180,7 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
                     destino = s.getNombreC3D();
                 }
             }
-            return new LValue(destino, null, null, tipo);
+            return new LValue(destino, null, null, tipo, null);
         }
 
         // Caso 2: obj.campo
@@ -191,8 +191,10 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
                 return resolverCampoDeElemento(ind, ac, generador);
             }
             ResultadoC3D base = ac.getObjeto().generarC3D(generador);
-            Tipo tipo = TipoPrimitivo.DESCONOCIDO;
-            return new LValue(base.getLugar(), ac.getCampo(), null, tipo);
+            // Usar el tipo YA resuelto por AccesoCampo.verificar() en vez de DESCONOCIDO:
+            // sin esto, un "+=" sobre obj.campo no sabria si el campo es flotante.
+            Tipo tipo = (ac.getTipoCampo() != null) ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
+            return new LValue(base.getLugar(), ac.getCampo(), null, tipo, ac.getClaseObjeto());
         }
 
         // Caso 3: arr[i]
@@ -201,7 +203,7 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
             ResultadoC3D idx  = ind.getIndice().generarC3D(generador);
             Tipo tipo = (ind.getTipoElemento() != null)
                     ? ind.getTipoElemento() : TipoPrimitivo.DESCONOCIDO;
-            return new LValue(base.getLugar(), null, idx.getLugar(), tipo);
+            return new LValue(base.getLugar(), null, idx.getLugar(), tipo, null);
         }
 
         throw new UnsupportedOperationException(
@@ -239,7 +241,7 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
             String t = generador.nuevoTemporal();
             generador.emitirCargaIndice(arr, idx, t);
             Tipo tipoCampo = (ac.getTipoCampo() != null) ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
-            return new LValue(t, ac.getCampo(), null, tipoCampo);
+            return new LValue(t, ac.getCampo(), null, tipoCampo, ac.getClaseObjeto());
         }
 
         // Auto-malloc del slot si es NULL.
@@ -263,7 +265,7 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
         generador.emitirCargaIndice(arr, idx, t_slot);
 
         Tipo tipoCampo = (ac.getTipoCampo() != null) ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
-        return new LValue(t_slot, ac.getCampo(), null, tipoCampo);
+        return new LValue(t_slot, ac.getCampo(), null, tipoCampo, ac.getClaseObjeto());
     }
 
     /**
@@ -279,7 +281,8 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
         if (lv.campo() != null) {
             String t = generador.nuevoTemporal();
             String tipoStr = (lv.tipo() != null) ? lv.tipo().nombre() : null;
-            generador.emitirCargaCampo(lv.base(), lv.campo(), t, tipoStr);
+            boolean esPuntero = (lv.tipo() != null && lv.tipo().esArreglo());
+            generador.emitirCargaCampo(lv.base(), lv.campo(), t, tipoStr, esPuntero, lv.claseObjeto());
             return ResultadoC3D.temporal(t, lv.tipo());
         }
         if (lv.indice() != null) {
@@ -292,7 +295,7 @@ public final class Asignacion extends NodoPigLatin implements ExpresionPigLatin 
 
     private void guardarEn(LValue lv, String v, GeneradorC3D generador) {
         if (lv.campo() != null) {
-            generador.emitirGuardarCampo(lv.base(), lv.campo(), v);
+            generador.emitirGuardarCampo(lv.base(), lv.campo(), v, lv.claseObjeto());
         } else if (lv.indice() != null) {
             generador.emitirGuardarIndice(lv.base(), lv.indice(), v);
         } else {

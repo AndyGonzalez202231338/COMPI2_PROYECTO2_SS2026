@@ -19,6 +19,7 @@ public final class AccesoCampo extends NodoPigLatin implements ExpresionPigLatin
 
     /** Tipo del campo, cacheado por verificar() para que generarC3D no lo recalcule. */
     private Tipo tipoCampo;
+    private String claseObjeto;
 
     public AccesoCampo(ExpresionPigLatin objeto, String campo, int linea, int columna) {
         super(linea, columna);
@@ -29,6 +30,7 @@ public final class AccesoCampo extends NodoPigLatin implements ExpresionPigLatin
     public ExpresionPigLatin getObjeto() { return objeto; }
     public String getCampo() { return campo; }
     public Tipo getTipoCampo() { return tipoCampo; }
+    public String getClaseObjeto() { return claseObjeto; }
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
@@ -49,6 +51,7 @@ public final class AccesoCampo extends NodoPigLatin implements ExpresionPigLatin
         }
         Acceso.verificar(m, ambito, errores, linea, columna);
         tipoCampo = m.getTipo();
+        this.claseObjeto = def.getNombre();
         return tipoCampo;
     }
 
@@ -61,7 +64,7 @@ public final class AccesoCampo extends NodoPigLatin implements ExpresionPigLatin
         // En PigLatin, todos los arreglos también son dinámicos.
         boolean esPuntero = (tipoCampo != null && tipoCampo.esArreglo());
 
-        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr, esPuntero);
+        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr, esPuntero, claseObjeto);
         Tipo tipo = (tipoCampo != null) ? tipoCampo : TipoPrimitivo.DESCONOCIDO;
         return ResultadoC3D.temporal(t, tipo);
     }

@@ -35,6 +35,7 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
         }
 
         Tipo tIzq = objetivo.verificar(ambito, errores);
+        if (valor instanceof Readln rl) rl.setTipoEsperado(tIzq);
         Tipo tDer = valor.verificar(ambito, errores);
 
         if (!operador.equals("=")) {
@@ -54,6 +55,16 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
 
         if (operador.equals("=")) {
             ResultadoC3D rhs = valor.generarC3D(generador);
+            // Conversion implicita entero -> flotante si el destino es float.
+            if (lv.tipo() != null
+                    && "flotante".equals(lv.tipo().nombre())
+                    && rhs.getTipo() != null
+                    && !"flotante".equals(rhs.getTipo().nombre())
+                    && rhs.getTipo() != TipoPrimitivo.DESCONOCIDO) {
+                String conv = generador.nuevoTemporal();
+                generador.emitirConversion(rhs.getTipo().nombre(), "flotante", rhs.getLugar(), conv);
+                rhs = ResultadoC3D.temporal(conv, TipoPrimitivo.FLOTANTE);
+            }
             guardarEn(lv, rhs.getLugar(), generador);
             return ResultadoC3D.valor(rhs.getLugar(), lv.tipo());
         }
@@ -67,7 +78,7 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
         return ResultadoC3D.temporal(t, lv.tipo());
     }
 
-    private record LValue(String base, String campo, String indice, Tipo tipo) {}
+    private record LValue(String base, String campo, String indice, Tipo tipo, String claseObjeto) {}
 
     private LValue resolverLValue(ExpresionZ objetivo, GeneradorC3D generador) {
         if (objetivo instanceof Identificador id) {
@@ -85,23 +96,23 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
                 }
             }
             if (cat == CategoriaSimbolo.ATRIBUTO) {
-                return new LValue("this", nombre, null, tipo);
+                return new LValue("this", nombre, null, tipo, generador.getClaseActual());
             }
             String nombreC3D = (simb != null) ? simb.getNombreC3D() : nombre;
-            return new LValue(nombreC3D, null, null, tipo);
+            return new LValue(nombreC3D, null, null, tipo, null);
         }
 
         if (objetivo instanceof AccesoCampo ac) {
             ResultadoC3D base = ac.getObjeto().generarC3D(generador);
             Tipo tipo = (ac.getTipoCampo() != null) ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
-            return new LValue(base.getLugar(), ac.getCampo(), null, tipo);
+            return new LValue(base.getLugar(), ac.getCampo(), null, tipo, ac.getClaseObjeto());
         }
 
         if (objetivo instanceof Indice ind) {
             ResultadoC3D base = ind.getArreglo().generarC3D(generador);
             ResultadoC3D idx  = ind.getIndice().generarC3D(generador);
             Tipo tipo = (ind.getTipoElemento() != null) ? ind.getTipoElemento() : TipoPrimitivo.DESCONOCIDO;
-            return new LValue(base.getLugar(), null, idx.getLugar(), tipo);
+            return new LValue(base.getLugar(), null, idx.getLugar(), tipo, null);
         }
 
         throw new UnsupportedOperationException(
@@ -113,12 +124,7 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
             String t = generador.nuevoTemporal();
             String tipoStr = (lv.tipo() != null) ? lv.tipo().nombre() : null;
             boolean esPuntero = (lv.tipo() != null && lv.tipo().esArreglo());
-            generador.emitirCargaCampo(lv.base(), lv.campo(), t, tipoStr, esPuntero);
-            return ResultadoC3D.temporal(t, lv.tipo());
-        }
-        if (lv.indice() != null) {
-            String t = generador.nuevoTemporal();
-            generador.emitirCargaIndice(lv.base(), lv.indice(), t);
+            generador.emitirCargaCampo(lv.base(), lv.campo(), t, tipoStr, esPuntero, lv.claseObjeto());
             return ResultadoC3D.temporal(t, lv.tipo());
         }
         return ResultadoC3D.valor(lv.base(), lv.tipo());
@@ -126,7 +132,7 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
 
     private void guardarEn(LValue lv, String v, GeneradorC3D generador) {
         if (lv.campo() != null) {
-            generador.emitirGuardarCampo(lv.base(), lv.campo(), v);
+            generador.emitirGuardarCampo(lv.base(), lv.campo(), v, lv.claseObjeto());
         } else if (lv.indice() != null) {
             generador.emitirGuardarIndice(lv.base(), lv.indice(), v);
         } else {

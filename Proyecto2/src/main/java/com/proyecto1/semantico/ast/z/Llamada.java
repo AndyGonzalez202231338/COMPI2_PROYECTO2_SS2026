@@ -187,9 +187,11 @@ public final class Llamada extends NodoZ implements ExpresionZ {
                         : java.util.Collections.emptyList();
 
         List<String> lugaresArgs = new ArrayList<>();
+        List<Tipo> tiposRealesArgs = new ArrayList<>();
         for (int _i = 0; _i < argumentos.size(); _i++) {
             ResultadoC3D v = argumentos.get(_i).generarC3D(generador);
             String lugar = v.getLugar();
+            tiposRealesArgs.add(v.getTipo());
 
             if (_i < paramsFormales.size()) {
                 Tipo tipoFormal = paramsFormales.get(_i).getTipo();
@@ -208,8 +210,15 @@ public final class Llamada extends NodoZ implements ExpresionZ {
 
         List<Tipo> tiposFormales = new ArrayList<>();
         if (simboloMetodo != null) {
-            for (Simbolo p : simboloMetodo.getParametros()) {
-                tiposFormales.add(p.getTipo() != null ? p.getTipo() : TipoPrimitivo.DESCONOCIDO);
+            List<Simbolo> params = simboloMetodo.getParametros();
+            for (int i = 0; i < params.size(); i++) {
+                Tipo tp = params.get(i).getTipo();
+                String n = (tp != null) ? tp.nombre() : null;
+                boolean roto = (n == null || n.isBlank() || n.replaceAll("[^A-Za-z0-9]", "").isEmpty());
+                if (roto && i < tiposRealesArgs.size() && tiposRealesArgs.get(i) != null) {
+                    tp = tiposRealesArgs.get(i);
+                }
+                tiposFormales.add(tp != null ? tp : TipoPrimitivo.DESCONOCIDO);
             }
         }
 
@@ -239,7 +248,7 @@ public final class Llamada extends NodoZ implements ExpresionZ {
 
         if (despachoDinamico) {
             List<GeneradorC3D.EntradaDispatch> entradas =
-                    generador.dispatchPara(claseReceptor, simboloMetodo);
+                    generador.dispatchPara(claseReceptor, simboloMetodo, tiposFormales);
             if (GeneradorC3D.necesitaDispatch(entradas)) {
                 emitirDispatch(generador, receptor, lugaresArgs, entradas, etiqueta, resultado);
                 return (resultado == null) ? ResultadoC3D.vacio() : ResultadoC3D.temporal(resultado, tipo);

@@ -68,11 +68,11 @@ public final class Unaria extends NodoZ implements ExpresionZ {
                     Tipo tc = ac.getTipoCampo() != null ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
                     String tipoStr = tc != TipoPrimitivo.DESCONOCIDO ? tc.nombre() : null;
                     boolean esPuntero = (tc != TipoPrimitivo.DESCONOCIDO && tc.esArreglo());
-                    generador.emitirCargaCampo(base.getLugar(), ac.getCampo(), viejoC, tipoStr, esPuntero);
+                    generador.emitirCargaCampo(base.getLugar(), ac.getCampo(), viejoC, tipoStr, esPuntero, ac.getClaseObjeto());
 
                     String nuevoC = generador.nuevoTemporal();
                     generador.emitirBinaria(operador.equals("++") ? "+" : "-", viejoC, "1", nuevoC);
-                    generador.emitirGuardarCampo(base.getLugar(), ac.getCampo(), nuevoC);
+                    generador.emitirGuardarCampo(base.getLugar(), ac.getCampo(), nuevoC, ac.getClaseObjeto());
 
                     return ResultadoC3D.temporal(prefijo ? nuevoC : viejoC, tc);
                 }
@@ -102,11 +102,11 @@ public final class Unaria extends NodoZ implements ExpresionZ {
                             String tipoStr2 = tc2 != TipoPrimitivo.DESCONOCIDO ? tc2.nombre() : null;
                             boolean esPuntero2 = (tc2 != TipoPrimitivo.DESCONOCIDO && tc2.esArreglo());
 
-                            generador.emitirCargaCampo("this", id.getNombre(), viejoC, tipoStr2, esPuntero2);
+                            generador.emitirCargaCampo("this", id.getNombre(), viejoC, tipoStr2, esPuntero2, generador.getClaseActual());
 
                             String nuevoC = generador.nuevoTemporal();
                             generador.emitirBinaria(operador.equals("++") ? "+" : "-", viejoC, "1", nuevoC);
-                            generador.emitirGuardarCampo("this", id.getNombre(), nuevoC);
+                            generador.emitirGuardarCampo("this", id.getNombre(), nuevoC, generador.getClaseActual());
 
                             return ResultadoC3D.temporal(prefijo ? nuevoC : viejoC, tc2);
                         }

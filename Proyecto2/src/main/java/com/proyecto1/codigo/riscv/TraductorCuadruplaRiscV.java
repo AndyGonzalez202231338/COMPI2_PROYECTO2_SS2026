@@ -228,7 +228,6 @@ public final class TraductorCuadruplaRiscV {
         sb.append("    j ").append(nombreFuncion).append("_fin\n");
     }
 
-    // --- RESTAURADO: Imprime el float manualmente para que salga con 6 decimales exactos ---
     private void traducirPrint(CuadruplaPrint q, StringBuilder sb) {
         String tipo = tipoParaImprimir(q);
         switch (tipo) {
@@ -367,12 +366,11 @@ public final class TraductorCuadruplaRiscV {
         return "entero";
     }
 
-    // read destino: el ecall de RARS depende del tipo que se esta leyendo.
-    //   entero   -> ecall 5, resultado en a0
-    //   flotante -> ecall 6, resultado en fa0
-    //   cadena   -> ecall 8, necesita un buffer (se reserva en el heap) y un
-    //               tamano maximo; RARS escribe ahi los bytes leidos + '\0'.
-    //   caracter -> ecall 12, resultado en a0 (codigo ASCII)
+    /** read destino: el ecall de RARS depende del tipo que se esta leyendo.
+     * entero   -> ecall 5, resultado en a0
+     * flotante -> ecall 6, resultado en fa0
+     * cadena   -> ecall 8, necesita un buffer (se reserva en el heap) y un tamano maximo; RARS escribe ahi los bytes leidos + '\0'.
+     * caracter -> ecall 12, resultado en a0 (codigo ASCII) */
     private void traducirRead(CuadruplaRead q, StringBuilder sb) {
         String tipo = q.tipo();
         if ("flotante".equals(tipo)) {
@@ -435,7 +433,7 @@ public final class TraductorCuadruplaRiscV {
 
     private void traducirCampoCarga(CuadruplaCampoCarga q, StringBuilder sb) {
         cargar(q.objeto(), "t1", sb);
-        int off = offsetDeCampo(q.campo(), sb);
+        int off = offsetDeCampo(q.campo(), q.claseObjeto(), sb);
 
         String t = q.tipoCampo();
         if (t != null && t.endsWith("[]")) {
@@ -457,12 +455,29 @@ public final class TraductorCuadruplaRiscV {
     private void traducirCampoGuarda(CuadruplaCampoGuarda q, StringBuilder sb) {
         cargar(q.objeto(), "t1", sb);
         cargar(q.valor(), "t0", sb);
-        int off = offsetDeCampo(q.campo(), sb);
+        int off = offsetDeCampo(q.campo(), q.claseObjeto(), sb);
         sb.append("    sw t0, ").append(off).append("(t1)\n");
     }
 
     private int offsetDeCampo(String campo, StringBuilder sb) {
+        return offsetDeCampo(campo, null, sb);
+    }
+
+    // Si se conoce la clase del objeto, resolver el offset DIRECTAMENTE contra esa
+    // clase (sin ambiguedad posible). Sin clase, cae al resolutor "por nombre unico"
+    // (offsetDeCampoUnico), que falla si dos clases distintas tienen un campo con el
+    // mismo nombre en offsets distintos (ej. "tamanio" en Pila vs en Cola).
+    private int offsetDeCampo(String campo, String claseObjeto, StringBuilder sb) {
         if (LayoutHeap.CAMPO_CLASS_ID.equals(campo)) return 0;
+
+        if (claseObjeto != null) {
+            int offClase = layoutHeap.offsetDe(claseObjeto, campo);
+            if (offClase >= 0) return offClase;
+            // La clase se conoce pero no tiene ese campo (podria ser un campo heredado
+            // de una SUBCLASE que esta clase declarada no ve): caer al resolutor
+            // generico como respaldo, en vez de fallar directamente.
+        }
+
         int off = layoutHeap.offsetDeCampoUnico(campo);
         if (off == -2) {
             sb.append("    # AVISO: el campo '").append(campo).append("' existe en varias clases con posiciones distintas\n");

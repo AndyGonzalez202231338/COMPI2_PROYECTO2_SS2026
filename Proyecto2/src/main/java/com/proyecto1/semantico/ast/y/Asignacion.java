@@ -125,7 +125,7 @@ public final class Asignacion extends NodoY implements InstruccionY {
         return ResultadoC3D.vacio();
     }
 
-    private record LValue(String base, String campo, String indice, Tipo tipo) {}
+    private record LValue(String base, String campo, String indice, Tipo tipo, String claseObjeto) {}
 
     private LValue resolverLValue(ExpresionY objetivo, GeneradorC3D generador) {
         if (objetivo instanceof Identificador id) {
@@ -137,18 +137,18 @@ public final class Asignacion extends NodoY implements InstruccionY {
                 if (s != null && s.getTipo() != null) t = s.getTipo();
                 if (s != null) destino = s.getNombreC3D();
             }
-            return new LValue(destino, null, null, t);
+            return new LValue(destino, null, null, t, null);
         }
         if (objetivo instanceof AccesoCampo ac) {
             ResultadoC3D base = ac.getObjeto().generarC3D(generador);
             Tipo t = (ac.getTipoCampo() != null) ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
-            return new LValue(base.getLugar(), ac.getCampo(), null, t);
+            return new LValue(base.getLugar(), ac.getCampo(), null, t, ac.getClaseObjeto());
         }
         if (objetivo instanceof Indice ind) {
             ResultadoC3D base = ind.getBaseArray().generarC3D(generador);
             ResultadoC3D idxPlano = ind.generarIndicePlano(generador);
             Tipo t = (ind.getTipoElemento() != null) ? ind.getTipoElemento() : TipoPrimitivo.DESCONOCIDO;
-            return new LValue(base.getLugar(), null, idxPlano.getLugar(), t);
+            return new LValue(base.getLugar(), null, idxPlano.getLugar(), t, null);
         }
         throw new UnsupportedOperationException("Asignación a " + objetivo.getClass().getSimpleName() + ": pendiente en C3D");
     }
@@ -157,7 +157,7 @@ public final class Asignacion extends NodoY implements InstruccionY {
         if (lv.campo() != null) {
             String t = generador.nuevoTemporal();
             String tipoStr = (lv.tipo() != null) ? lv.tipo().nombre() : null;
-            generador.emitirCargaCampo(lv.base(), lv.campo(), t, tipoStr);
+            generador.emitirCargaCampo(lv.base(), lv.campo(), t, tipoStr, false, lv.claseObjeto());
             return ResultadoC3D.temporal(t, lv.tipo());
         }
         if (lv.indice() != null) {
@@ -170,7 +170,7 @@ public final class Asignacion extends NodoY implements InstruccionY {
 
     private void guardarEn(LValue lv, String v, GeneradorC3D generador) {
         if (lv.campo() != null) {
-            generador.emitirGuardarCampo(lv.base(), lv.campo(), v);
+            generador.emitirGuardarCampo(lv.base(), lv.campo(), v, lv.claseObjeto());
         } else if (lv.indice() != null) {
             generador.emitirGuardarIndice(lv.base(), lv.indice(), v);
         } else {

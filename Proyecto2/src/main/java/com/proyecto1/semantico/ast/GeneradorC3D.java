@@ -62,18 +62,37 @@ public class GeneradorC3D {
     }
 
     public List<EntradaDispatch> dispatchPara(Simbolo claseEstatica, Simbolo metodo) {
+        return dispatchPara(claseEstatica, metodo, null);
+    }
+
+    public List<EntradaDispatch> dispatchPara(Simbolo claseEstatica, Simbolo metodo,
+                                              List<Tipo> tiposFallback) {
         List<EntradaDispatch> entradas = new ArrayList<>();
         if (ambito == null || claseEstatica == null || metodo == null) return entradas;
 
         int indice = indiceEnTablaVirtual(claseEstatica, metodo);
         if (indice < 0) return entradas;
 
+        List<Tipo> tiposCorrectos = new ArrayList<>();
+        List<Simbolo> paramsMetodo = metodo.getParametros();
+        for (int i = 0; i < paramsMetodo.size(); i++) {
+            Tipo tp = paramsMetodo.get(i).getTipo();
+            String n = (tp != null) ? tp.nombre() : null;
+            boolean roto = (n == null || n.isBlank() || n.replaceAll("[^A-Za-z0-9]", "").isEmpty());
+            if (roto && tiposFallback != null && i < tiposFallback.size()) {
+                tp = tiposFallback.get(i);
+            }
+            tiposCorrectos.add(tp != null ? tp : TipoPrimitivo.DESCONOCIDO);
+        }
+
         for (Simbolo s : ambito.ambitoGlobal().simbolosLocales()) {
             if (s.getCategoria() != CategoriaSimbolo.CLASE || !s.esSubclaseDe(claseEstatica)) continue;
             List<Simbolo> tabla = s.getTablaVirtual();
             if (indice >= tabla.size()) continue;
             Simbolo impl = tabla.get(indice);
-            entradas.add(new EntradaDispatch(s.getClassId(), s.getNombre(), etiquetaDe(impl)));
+            String claseImpl = (impl.getClaseDuena() != null) ? impl.getClaseDuena().getNombre() : s.getNombre();
+            String etiqueta = etiquetaMetodo(claseImpl, impl.getNombre(), tiposCorrectos);
+            entradas.add(new EntradaDispatch(s.getClassId(), s.getNombre(), etiqueta));
         }
         entradas.sort((a, b) -> a.nombreClase().compareTo(b.nombreClase()));
         return entradas;
@@ -305,6 +324,13 @@ public class GeneradorC3D {
         tabla.agregar(new CuadruplaCampoGuarda(obj, campo, v));
     }
 
+    // Variante con la clase del objeto: resuelve el offset del campo sin ambiguedad
+    // cuando dos clases distintas tienen un campo con el mismo nombre en posiciones
+    // diferentes.
+    public void emitirGuardarCampo(String obj, String campo, String v, String claseObjeto) {
+        tabla.agregar(new CuadruplaCampoGuarda(obj, campo, v, claseObjeto));
+    }
+
     public void emitirCargaCampo(String objeto, String campo, String destino, String tipoCampo) {
         tabla.agregar(new CuadruplaCampoCarga(objeto, campo, destino, tipoCampo));
     }
@@ -312,6 +338,12 @@ public class GeneradorC3D {
     // Variante con tipo del campo y bandera de puntero (para Zetariano)
     public void emitirCargaCampo(String objeto, String campo, String destino, String tipoCampo, boolean esPuntero) {
         tabla.agregar(new CuadruplaCampoCarga(objeto, campo, destino, tipoCampo, esPuntero));
+    }
+
+    // Variante completa: tipo + puntero + clase del objeto.
+    public void emitirCargaCampo(String objeto, String campo, String destino, String tipoCampo,
+                                 boolean esPuntero, String claseObjeto) {
+        tabla.agregar(new CuadruplaCampoCarga(objeto, campo, destino, tipoCampo, esPuntero, claseObjeto));
     }
 
     public void emitirNew(String nombreClase, String t) {
