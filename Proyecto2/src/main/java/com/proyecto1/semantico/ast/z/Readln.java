@@ -10,31 +10,41 @@ import com.proyecto1.semantico.tipos.TipoPrimitivo;
 /**
  * readlnExpression (#primarioReadln): "readln()".
  *
- * Es una expresión (no una instrucción): devuelve el valor leído, que el padre
- * decide qué hacer con él x = readln();, readln() + "x", etc.). Como en Z la lectura se trata como llamada al
- * runtime, el C3D es (call, rt_readln, 0, t) con un temporal nuevo como
- * destino.
+ * Es una expresion (no una instruccion): devuelve el valor leido, que el
+ * padre decide que hacer con el (x = readln(), readln() + "x", etc.).
+ *
+ * El tipo de retorno se infiere del contexto: si readln() aparece como
+ * inicializador de "int x = readln()", el tipo es entero; si aparece en
+ * "String s = readln()", es cadena. Sin contexto, se asume cadena.
  */
 public final class Readln extends NodoZ implements ExpresionZ {
+
+    /**
+     * Tipo esperado por el contexto (ej. "int x = readln()" -> ENTERO).
+     * Lo setea el nodo padre (DeclaracionVariable, Asignacion) antes de
+     * llamar a verificar(). Si nadie lo setea, queda null y se asume CADENA.
+     */
+    private Tipo tipoEsperado;
 
     public Readln(int linea, int columna) {
         super(linea, columna);
     }
 
+    public void setTipoEsperado(Tipo tipo) {
+        this.tipoEsperado = tipo;
+    }
+
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
-        // readln() no tiene argumentos; sin más validación.
+        if (tipoEsperado != null) return tipoEsperado;
         return TipoPrimitivo.CADENA;
     }
 
-    /**
-     * Emite: una única cuádrupla (call, rt_readln, 0, t) con un temporal nuevo,
-     * y devuelve temporal(t, CADENA). El padre decide qué hacer con el valor.
-     */
     @Override
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         String t = generador.nuevoTemporal();
-        generador.emitirRead(t, "cadena");
-        return ResultadoC3D.temporal(t, TipoPrimitivo.CADENA);
+        String tipo = (tipoEsperado != null) ? tipoEsperado.nombre() : "cadena";
+        generador.emitirRead(t, tipo);
+        return ResultadoC3D.temporal(t, tipoEsperado != null ? tipoEsperado : TipoPrimitivo.CADENA);
     }
 }

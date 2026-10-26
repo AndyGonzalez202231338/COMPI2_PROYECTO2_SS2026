@@ -56,7 +56,7 @@ public final class Identificador extends NodoZ implements ExpresionZ {
             String t = generador.nuevoTemporal();
             String tipoStr = (tipo != null) ? tipo.nombre() : null;
             boolean esPuntero = (tipo != null && tipo.esArreglo());
-            generador.emitirCargaCampo("this", nombre, t, tipoStr, esPuntero);
+            generador.emitirCargaCampo("this", nombre, t, tipoStr, esPuntero, generador.getClaseActual());
             return ResultadoC3D.temporal(t, tipo);
         }
 

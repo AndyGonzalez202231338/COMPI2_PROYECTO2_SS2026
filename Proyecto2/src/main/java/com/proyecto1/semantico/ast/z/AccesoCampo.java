@@ -20,6 +20,10 @@ public final class AccesoCampo extends NodoZ implements ExpresionZ {
     /** Tipo del campo, cacheado por verificar() para que generarC3D no lo recalcule. */
     private Tipo tipoCampo;
 
+    /** Nombre de la clase DECLARADA del objeto, cacheado para resolver el offset del
+     *  campo sin ambiguedad (ver claseObjeto en CuadruplaCampoCarga). */
+    private String claseObjeto;
+
     public AccesoCampo(ExpresionZ objeto, String campo, int linea, int columna) {
         super(linea, columna);
         this.objeto = objeto;
@@ -29,6 +33,7 @@ public final class AccesoCampo extends NodoZ implements ExpresionZ {
     public ExpresionZ getObjeto() { return objeto; }
     public String getCampo() { return campo; }
     public Tipo getTipoCampo() { return tipoCampo; }
+    public String getClaseObjeto() { return claseObjeto; }
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
@@ -53,6 +58,7 @@ public final class AccesoCampo extends NodoZ implements ExpresionZ {
         // Si falla se sigue con el tipo real del campo para no generar errores en cascada.
         Acceso.verificar(miembro, ambito, errores, linea, columna);
         tipoCampo = miembro.getTipo();
+        this.claseObjeto = tc.getDefinicion().getNombre();
         return tipoCampo;
     }
 
@@ -65,7 +71,8 @@ public final class AccesoCampo extends NodoZ implements ExpresionZ {
         ResultadoC3D base = objeto.generarC3D(generador);
         String t = generador.nuevoTemporal();
         String tipoCampoStr = (tipoCampo != null) ? tipoCampo.nombre() : null;
-        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr);
+        boolean esPuntero = (tipoCampo != null && tipoCampo.esArreglo());
+        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr, esPuntero, claseObjeto);
         Tipo tipo = (tipoCampo != null) ? tipoCampo : TipoPrimitivo.DESCONOCIDO;
         return ResultadoC3D.temporal(t, tipo);
     }

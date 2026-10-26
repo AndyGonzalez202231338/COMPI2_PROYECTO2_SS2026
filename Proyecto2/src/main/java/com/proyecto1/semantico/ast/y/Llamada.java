@@ -124,19 +124,42 @@ public final class Llamada extends NodoY implements ExpresionY {
 
         // CASO 2: Llamada a método (p.getNombre())
         if (objetivo instanceof AccesoCampo ac) {
-            ResultadoC3D base = ac.getObjeto().generarC3D(generador); // evalúa 'p'
+            ResultadoC3D base = ac.getObjeto().generarC3D(generador);
             List<String> lugaresArgs = new ArrayList<>();
+            List<Tipo> tiposRealesArgs = new ArrayList<>();
             for (ExpresionY a : argumentos) {
-                lugaresArgs.add(a.generarC3D(generador).getLugar());
+                ResultadoC3D v = a.generarC3D(generador);
+                lugaresArgs.add(v.getLugar());
+                tiposRealesArgs.add(v.getTipo());
             }
 
-            // El primer parámetro de un método de Z es el "this" implícito (la instancia 'p').
             generador.emitirParam(base.getLugar());
             for (String lugar : lugaresArgs) {
                 generador.emitirParam(lugar);
             }
 
-            String etiqueta = GeneradorC3D.etiquetaDe(simboloMetodo);
+            // Construir tiposFormales con fallback a los tipos reales de los
+            // argumentos, por si el simbolo tiene tipos rotos (clase Z no
+            // resuelta al momento de copiar la tabla virtual).
+            List<Tipo> tiposFormales = new ArrayList<>();
+            if (simboloMetodo != null) {
+                List<Simbolo> params = simboloMetodo.getParametros();
+                for (int i = 0; i < params.size(); i++) {
+                    Tipo tp = params.get(i).getTipo();
+                    String n = (tp != null) ? tp.nombre() : null;
+                    boolean roto = (n == null || n.isBlank() || n.replaceAll("[^A-Za-z0-9]", "").isEmpty());
+                    if (roto && i < tiposRealesArgs.size() && tiposRealesArgs.get(i) != null) {
+                        tp = tiposRealesArgs.get(i);
+                    }
+                    tiposFormales.add(tp != null ? tp : TipoPrimitivo.DESCONOCIDO);
+                }
+            }
+
+            String clase = (simboloMetodo != null && simboloMetodo.getClaseDuena() != null)
+                    ? simboloMetodo.getClaseDuena().getNombre() : "?";
+            String metodo = ac.getCampo();
+            String etiqueta = GeneradorC3D.etiquetaMetodo(clase, metodo, tiposFormales);
+
             String t = generador.nuevoTemporal();
             Tipo tipoRetorno = (simboloMetodo != null && simboloMetodo.getTipo() != null)
                     ? simboloMetodo.getTipo() : TipoPrimitivo.DESCONOCIDO;

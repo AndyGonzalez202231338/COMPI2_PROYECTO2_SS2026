@@ -161,9 +161,11 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
                         : java.util.Collections.emptyList();
 
         List<String> lugaresArgs = new ArrayList<>();
+        List<Tipo> tiposRealesArgs = new ArrayList<>();
         for (int _i = 0; _i < argumentos.size(); _i++) {
             ResultadoC3D v = argumentos.get(_i).generarC3D(generador);
             String lugar = v.getLugar();
+            tiposRealesArgs.add(v.getTipo());
 
             // Si el argumento es entero pero el parametro formal es flotante,
             // emitir una conversion i2f para que el callee reciba bits IEEE 754
@@ -210,10 +212,15 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
             String clase = (nombreClaseObjetivo != null) ? nombreClaseObjetivo : "?";
             List<com.proyecto1.semantico.tipos.Tipo> tiposFormales = new java.util.ArrayList<>();
             if (simboloResuelto != null) {
-                for (com.proyecto1.semantico.tabla.Simbolo p : simboloResuelto.getParametros()) {
-                    tiposFormales.add(p.getTipo() != null
-                            ? p.getTipo()
-                            : com.proyecto1.semantico.tipos.TipoPrimitivo.DESCONOCIDO);
+                java.util.List<com.proyecto1.semantico.tabla.Simbolo> params = simboloResuelto.getParametros();
+                for (int i = 0; i < params.size(); i++) {
+                    Tipo tp = params.get(i).getTipo();
+                    String n = (tp != null) ? tp.nombre() : null;
+                    boolean roto = (n == null || n.isBlank() || n.replaceAll("[^A-Za-z0-9]", "").isEmpty());
+                    if (roto && i < tiposRealesArgs.size() && tiposRealesArgs.get(i) != null) {
+                        tp = tiposRealesArgs.get(i);
+                    }
+                    tiposFormales.add(tp != null ? tp : TipoPrimitivo.DESCONOCIDO);
                 }
             }
             String etiqueta = GeneradorC3D.etiquetaMetodo(clase, ac.getCampo(), tiposFormales);
@@ -222,7 +229,7 @@ public final class Llamada extends NodoPigLatin implements ExpresionPigLatin {
             // Dispatch dinamico si alguna subclase sobreescribe el metodo.
             if (despachoDinamico && claseReceptor != null && simboloResuelto != null) {
                 java.util.List<GeneradorC3D.EntradaDispatch> entradas =
-                        generador.dispatchPara(claseReceptor, simboloResuelto);
+                        generador.dispatchPara(claseReceptor, simboloResuelto, tiposFormales);
                 if (GeneradorC3D.necesitaDispatch(entradas)) {
                     emitirDispatch(generador, receptor, lugaresArgs, entradas,
                             etiqueta, resultado, argumentos.size() + 1);

@@ -96,15 +96,15 @@ public final class Unaria extends NodoY implements ExpresionY {
 
                     ResultadoC3D base = ac.getObjeto().generarC3D(generador);
                     String viejoC = generador.nuevoTemporal();
-                    generador.emitirCargaCampo(base.getLugar(), ac.getCampo(), viejoC);
+                    Tipo tc = ac.getTipoCampo() != null ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
+                    String tipoStr = tc != TipoPrimitivo.DESCONOCIDO ? tc.nombre() : null;
+                    boolean esPuntero = (tc != TipoPrimitivo.DESCONOCIDO && tc.esArreglo());
+                    generador.emitirCargaCampo(base.getLugar(), ac.getCampo(), viejoC, tipoStr, esPuntero, ac.getClaseObjeto());
                     String nuevoC = generador.nuevoTemporal();
                     generador.emitirBinaria(operador.equals("++") ? "+" : "-", viejoC, "1", nuevoC);
-                    generador.emitirGuardarCampo(base.getLugar(), ac.getCampo(), nuevoC);
-
-                    Tipo tc = ac.getTipoCampo() != null ? ac.getTipoCampo() : TipoPrimitivo.DESCONOCIDO;
+                    generador.emitirGuardarCampo(base.getLugar(), ac.getCampo(), nuevoC, ac.getClaseObjeto());
 
                     return ResultadoC3D.temporal(prefijo ? nuevoC : viejoC, tc);
-
                 }
                 if (operando instanceof Indice ix) {
                     ResultadoC3D baseA = ix.getArreglo().generarC3D(generador);

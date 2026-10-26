@@ -17,6 +17,7 @@ public final class AccesoCampo extends NodoY implements ExpresionY {
     private final String campo;
 
     private Tipo tipoCampo;
+    private String claseObjeto;
 
     public AccesoCampo(ExpresionY objeto, String campo, int linea, int columna) {
         super(linea, columna);
@@ -27,13 +28,13 @@ public final class AccesoCampo extends NodoY implements ExpresionY {
     public ExpresionY getObjeto() { return objeto; }
     public String getCampo() { return campo; }
     public Tipo getTipoCampo() { return tipoCampo; }
+    public String getClaseObjeto() { return claseObjeto; }
 
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         Tipo tObj = objeto.verificar(ambito, errores);
         Simbolo def;
 
-        // FIX: aceptar Estructura (Y) o Clase (Z)
         if (tObj instanceof TipoEstructura te) {
             def = te.getDefinicion();
         } else if (tObj instanceof TipoClase tc) {
@@ -52,6 +53,7 @@ public final class AccesoCampo extends NodoY implements ExpresionY {
             return TipoPrimitivo.DESCONOCIDO;
         }
         tipoCampo = campoSim.getTipo();
+        this.claseObjeto = def.getNombre();
         return tipoCampo;
     }
 
@@ -63,7 +65,7 @@ public final class AccesoCampo extends NodoY implements ExpresionY {
 
         boolean esPuntero = (tipoCampo != null && tipoCampo.esArreglo());
 
-        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr, esPuntero);
+        generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr, esPuntero, claseObjeto);
         Tipo tipo = (tipoCampo != null) ? tipoCampo : TipoPrimitivo.DESCONOCIDO;
         return ResultadoC3D.temporal(t, tipo);
     }

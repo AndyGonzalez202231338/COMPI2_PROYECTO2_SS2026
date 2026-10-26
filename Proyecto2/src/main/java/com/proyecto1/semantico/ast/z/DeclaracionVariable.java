@@ -59,6 +59,7 @@ public final class DeclaracionVariable extends NodoZ implements InstruccionZ {
         }
         this.simbolo = s;
         if (inicializador != null) {
+            if (inicializador instanceof Readln rl) rl.setTipoEsperado(t);
             Tipo tInit = inicializador.verificar(ambito, errores);
             if (!Tipos.esAsignable(t, tInit))
                 errores.reportar(linea, columna,
@@ -77,7 +78,15 @@ public final class DeclaracionVariable extends NodoZ implements InstruccionZ {
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         if (inicializador != null) {
             ResultadoC3D v = inicializador.generarC3D(generador);
-            // Usar el nombre unico del Simbolo para evitar colisiones entre bloques.
+            if (simbolo != null && simbolo.getTipo() != null
+                    && "flotante".equals(simbolo.getTipo().nombre())
+                    && v.getTipo() != null
+                    && !"flotante".equals(v.getTipo().nombre())
+                    && v.getTipo() != TipoPrimitivo.DESCONOCIDO) {
+                String conv = generador.nuevoTemporal();
+                generador.emitirConversion(v.getTipo().nombre(), "flotante", v.getLugar(), conv);
+                v = ResultadoC3D.temporal(conv, TipoPrimitivo.FLOTANTE);
+            }
             String dest = (simbolo != null) ? simbolo.getNombreC3D() : nombre;
             generador.emitirAsignacion(v.getLugar(), dest);
         }
