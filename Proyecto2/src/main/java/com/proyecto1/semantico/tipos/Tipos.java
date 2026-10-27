@@ -69,9 +69,11 @@ public final class Tipos {
         if (esDesconocido(a) || esDesconocido(b)) return true;
         if (a.equals(b)) return true;
         if (a.esNumerico() && b.esNumerico()) return true;
-        // null contra cualquier compuesto/arreglo (y viceversa).
-        if (a == TipoPrimitivo.NULO && (b.esCompuesto() || b.esArreglo())) return true;
-        if (b == TipoPrimitivo.NULO && (a.esCompuesto() || a.esArreglo())) return true;
+        // null contra cualquier tipo referencia (compuesto, arreglo o cadena).
+        // En el heap, cadena es un puntero igual que un objeto, asi que
+        // "texto == null" es valido (como en Java).
+        if (a == TipoPrimitivo.NULO && (b.esCompuesto() || b.esArreglo() || b == TipoPrimitivo.CADENA)) return true;
+        if (b == TipoPrimitivo.NULO && (a.esCompuesto() || a.esArreglo() || a == TipoPrimitivo.CADENA)) return true;
         return false;
     }
 

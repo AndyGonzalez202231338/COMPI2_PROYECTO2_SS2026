@@ -8,6 +8,7 @@ import com.proyecto1.semantico.tabla.Ambito;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
+import com.proyecto1.semantico.tipos.TipoArreglo;
 import com.proyecto1.semantico.tipos.TipoClase;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
 
@@ -16,6 +17,7 @@ public final class AccesoCampo extends NodoZ implements ExpresionZ {
 
     private final ExpresionZ objeto;
     private final String campo;
+    private boolean esLength;
 
     /** Tipo del campo, cacheado por verificar() para que generarC3D no lo recalcule. */
     private Tipo tipoCampo;
@@ -38,6 +40,11 @@ public final class AccesoCampo extends NodoZ implements ExpresionZ {
     @Override
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         Tipo tObj = objeto.verificar(ambito, errores);
+        if (tObj instanceof TipoArreglo && "length".equals(campo)) {
+            this.tipoCampo = TipoPrimitivo.ENTERO;
+            this.esLength = true;
+            return TipoPrimitivo.ENTERO;
+        }
         if (!(tObj instanceof TipoClase tc)) {
             if (!tObj.esDesconocido())
                 errores.reportar(linea, columna,
@@ -70,6 +77,10 @@ public final class AccesoCampo extends NodoZ implements ExpresionZ {
     public ResultadoC3D generarC3D(GeneradorC3D generador) {
         ResultadoC3D base = objeto.generarC3D(generador);
         String t = generador.nuevoTemporal();
+        if (esLength) {
+            generador.emitirCargaIndice(base.getLugar(), "-1", t);
+            return ResultadoC3D.temporal(t, TipoPrimitivo.ENTERO);
+        }
         String tipoCampoStr = (tipoCampo != null) ? tipoCampo.nombre() : null;
         boolean esPuntero = (tipoCampo != null && tipoCampo.esArreglo());
         generador.emitirCargaCampo(base.getLugar(), campo, t, tipoCampoStr, esPuntero, claseObjeto);
