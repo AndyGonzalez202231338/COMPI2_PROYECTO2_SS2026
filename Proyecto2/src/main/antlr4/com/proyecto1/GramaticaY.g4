@@ -28,7 +28,7 @@ campoEstructura
 /** FUNCIONES **/
 // flecha tipo cuando retorna algo la funcion
 definicionFuncion
-    : DEFINIR ID LPAREN listaParametros? RPAREN (FLECHA tipo)? bloque     #funcionDef
+    : DEFINIR ID LPAREN listaParametros? RPAREN (FLECHA (CORIZQ CORDER)? tipo)? bloque     #funcionDef
     ;
 
 listaParametros

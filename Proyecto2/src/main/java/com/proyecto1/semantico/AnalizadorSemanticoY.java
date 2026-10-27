@@ -10,6 +10,7 @@ import com.proyecto1.semantico.tabla.AmbitoGlobal;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
+import com.proyecto1.semantico.tipos.TipoArreglo;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
 
 public class AnalizadorSemanticoY {
@@ -41,6 +42,9 @@ public class AnalizadorSemanticoY {
             Tipo tRet = (f.getTipoRetorno() == null)
                     ? TipoPrimitivo.VOID
                     : f.getTipoRetorno().resolver(global, errores);
+            if (f.isRetornoEsArreglo() && tRet != null && !(tRet instanceof TipoArreglo)) {
+                tRet = new TipoArreglo(tRet, 0);
+            }
 
             Simbolo s = new Simbolo(f.getNombre(), CategoriaSimbolo.FUNCION,
                     tRet, f.getLinea(), f.getColumna());

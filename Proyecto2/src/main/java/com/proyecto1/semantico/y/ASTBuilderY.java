@@ -114,10 +114,19 @@ public class ASTBuilderY extends GramaticaYBaseVisitor<NodoAST> {
             }
         }
         // "(FLECHA tipo)?" : si no hubo flecha, tipo() da null -> función void.
-        NodoTipoRef tipoRetorno = (ctx.tipo() == null) ? null : construirTipoRef(ctx.tipo());
+        NodoTipoRef tipoRetorno = null;
+        boolean retornoEsArreglo = false;
+        if (ctx.tipo() != null) {
+            tipoRetorno = construirTipoRef(ctx.tipo());
+            // Si hay "-> [] tipo", los corchetes CORIZQ CORDER aparecen antes del tipo.
+            // ctx.CORIZQ() y ctx.CORDER() no son null cuando la gramatica los matcheo.
+            retornoEsArreglo = (ctx.CORIZQ() != null);
+        }
         Bloque cuerpo = construirBloque(ctx.bloque());
-        return new Funcion(ctx.ID().getText(), parametros, tipoRetorno, cuerpo,
+        Funcion fn = new Funcion(ctx.ID().getText(), parametros, tipoRetorno, cuerpo,
                 linea(ctx), columna(ctx));
+        fn.setRetornoEsArreglo(retornoEsArreglo);
+        return fn;
     }
 
     /** Lee los ENTERO_LIT capturados por "(CORIZQ ENTERO_LIT CORDER)*" como enteros ya parseados. */

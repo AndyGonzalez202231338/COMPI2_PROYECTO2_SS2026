@@ -8,6 +8,7 @@ import com.proyecto1.semantico.tabla.AmbitoFuncion;
 import com.proyecto1.semantico.tabla.CategoriaSimbolo;
 import com.proyecto1.semantico.tabla.Simbolo;
 import com.proyecto1.semantico.tipos.Tipo;
+import com.proyecto1.semantico.tipos.TipoArreglo;
 import com.proyecto1.semantico.tipos.TipoPrimitivo;
 
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ public final class Funcion extends NodoY {
     private List<Tipo> tiposParamsCache;
     private Tipo tipoRetornoCache;
     private AmbitoFuncion ambitoPropio;
+    private boolean retornoEsArreglo;
 
     public Funcion(String nombre, List<Parametro> parametros, NodoTipoRef tipoRetorno,
                    Bloque cuerpo, int linea, int columna) {
@@ -37,6 +39,8 @@ public final class Funcion extends NodoY {
     public NodoTipoRef getTipoRetorno() { return tipoRetorno; }
     public boolean esVoid() { return tipoRetorno == null; }
     public Bloque getCuerpo() { return cuerpo; }
+    public boolean isRetornoEsArreglo() { return retornoEsArreglo; }
+    public void setRetornoEsArreglo(boolean v) { this.retornoEsArreglo = v; }
 
     public Tipo verificar(Ambito ambito, ManejadorErrores errores) {
         Simbolo simbolo = ambito.resolverLocal(nombre);
@@ -55,9 +59,11 @@ public final class Funcion extends NodoY {
                 errores.reportar(sp.getLinea(), sp.getColumna(),
                         "Parámetro duplicado: '" + sp.getNombre() + "'");
         }
-        tipoRetornoCache = (tipoRetorno == null)
-                ? TipoPrimitivo.VOID
-                : tipoRetorno.resolver(amb, errores);
+        Tipo tipoRet = (tipoRetorno != null) ? tipoRetorno.resolver(ambito, errores) : TipoPrimitivo.VOID;
+        if (retornoEsArreglo && tipoRet != null && !(tipoRet instanceof TipoArreglo)) {
+            tipoRet = new TipoArreglo(tipoRet, 0);
+        }
+        this.tipoRetornoCache = tipoRet;
 
         cuerpo.verificar(amb, errores);
 
