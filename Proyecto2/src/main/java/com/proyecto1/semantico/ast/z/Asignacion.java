@@ -73,7 +73,12 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
         ResultadoC3D rhs    = valor.generarC3D(generador);
         String opBin = operador.substring(0, operador.length() - 1);
         String t = generador.nuevoTemporal();
-        generador.emitirBinaria(opBin, actual.getLugar(), rhs.getLugar(), t);
+        // s += "x" es concatenacion, no suma aritmetica
+        if (opBin.equals("+") && lv.tipo() == TipoPrimitivo.CADENA) {
+            generador.emitirConcat(actual.getLugar(), rhs.getLugar(), t);
+        } else {
+            generador.emitirBinaria(opBin, actual.getLugar(), rhs.getLugar(), t);
+        }
         guardarEn(lv, t, generador);
         return ResultadoC3D.temporal(t, lv.tipo());
     }
@@ -125,6 +130,12 @@ public final class Asignacion extends NodoZ implements ExpresionZ {
             String tipoStr = (lv.tipo() != null) ? lv.tipo().nombre() : null;
             boolean esPuntero = (lv.tipo() != null && lv.tipo().esArreglo());
             generador.emitirCargaCampo(lv.base(), lv.campo(), t, tipoStr, esPuntero, lv.claseObjeto());
+            return ResultadoC3D.temporal(t, lv.tipo());
+        }
+        if (lv.indice() != null) {
+            String t = generador.nuevoTemporal();
+            String tipoElem = (lv.tipo() != null) ? lv.tipo().nombre() : null;
+            generador.emitirCargaIndice(lv.base(), lv.indice(), t, tipoElem);
             return ResultadoC3D.temporal(t, lv.tipo());
         }
         return ResultadoC3D.valor(lv.base(), lv.tipo());
