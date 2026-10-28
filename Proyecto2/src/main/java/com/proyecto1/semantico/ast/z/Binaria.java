@@ -107,7 +107,13 @@ public final class Binaria extends NodoZ implements ExpresionZ {
                 tipo = TipoPrimitivo.DESCONOCIDO;
         }
         String t = generador.nuevoTemporal();
-        generador.emitirBinaria(operador, a.getLugar(), b.getLugar(), t);
+        if ((operador.equals("==") || operador.equals("!="))
+                && a.getTipo() == TipoPrimitivo.CADENA
+                && b.getTipo() == TipoPrimitivo.CADENA) {
+            generador.emitirCompCadena(operador, a.getLugar(), b.getLugar(), t);
+        } else {
+            generador.emitirBinaria(operador, a.getLugar(), b.getLugar(), t);
+        }
         return ResultadoC3D.temporal(t, tipo);
     }
 }

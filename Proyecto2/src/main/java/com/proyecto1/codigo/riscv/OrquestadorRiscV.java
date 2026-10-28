@@ -108,15 +108,33 @@ public final class OrquestadorRiscV {
         sb.append("heap_mem: .space ").append(BYTES_HEAP).append("\n");
         sb.append("heap_end: .word 0\n");
         sb.append("_heap_err_msg: .string \"Error: heap agotado\\n\"\n");
+        sb.append("_idx_err_msg: .string \"Error: indice fuera de rango\\n\"\n");
+        sb.append("_div_err_msg: .string \"Error: division entre cero\\n\"\n");
         sb.append("\n.text\n");
         sb.append(".globl main\n\n");
         sb.append(texto);
+
         sb.append("_heap_overflow:\n"); // Rutina de error por heap agotado
         sb.append("    la a0, _heap_err_msg\n");
         sb.append("    li a7, 4\n");
         sb.append("    ecall\n");
         sb.append("    li a7, 10\n");
         sb.append("    ecall\n\n");
+
+        sb.append("_idx_out_of_bounds:\n"); // Rutina de error por indice fuera de rango
+        sb.append("    la a0, _idx_err_msg\n");
+        sb.append("    li a7, 4\n");
+        sb.append("    ecall\n");
+        sb.append("    li a7, 10\n");
+        sb.append("    ecall\n\n");
+
+        sb.append("_div_zero:\n"); //Divisioens sobre cero
+        sb.append("    la a0, _div_err_msg\n");
+        sb.append("    li a7, 4\n");
+        sb.append("    ecall\n");
+        sb.append("    li a7, 10\n");
+        sb.append("    ecall\n\n");
+
         return sb.toString();
     }
 

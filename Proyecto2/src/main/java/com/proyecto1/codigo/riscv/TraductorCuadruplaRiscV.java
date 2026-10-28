@@ -112,8 +112,20 @@ public final class TraductorCuadruplaRiscV {
             case "+" -> sb.append("    add t2, t0, t1\n");
             case "-" -> sb.append("    sub t2, t0, t1\n");
             case "*" -> sb.append("    mul t2, t0, t1\n");
-            case "/" -> sb.append("    div t2, t0, t1\n");
-            case "%" -> sb.append("    rem t2, t0, t1\n");
+            case "/" -> {
+                String ok = etiquetaInterna("div_ok");
+                sb.append("    bnez t1, ").append(ok).append("\n");
+                sb.append("    j _div_zero\n");
+                sb.append(ok).append(":\n");
+                sb.append("    div t2, t0, t1\n");
+            }
+            case "%" -> {
+                String ok = etiquetaInterna("rem_ok");
+                sb.append("    bnez t1, ").append(ok).append("\n");
+                sb.append("    j _div_zero\n");
+                sb.append(ok).append(":\n");
+                sb.append("    rem t2, t0, t1\n");
+            }
             case "<" -> sb.append("    slt t2, t0, t1\n");
             case ">" -> sb.append("    slt t2, t1, t0\n");
             case "<=" -> {
@@ -445,7 +457,21 @@ public final class TraductorCuadruplaRiscV {
             sb.append("    lw t2, 0(t1)\n");
             sb.append("    addi t2, t2, 256\n");
             sb.append("    sw t2, 0(t1)\n");
-            // El resultado (direccion del buffer) queda en a0 (RARS no lo cambia).
+            // Quitar el \n que ecall 8 deja al final del buffer.
+            // Recorre desde a0 hasta encontrar \n o \0 y lo reemplaza por \0.
+            String loop = etiquetaInterna("strip_loop");
+            String fin  = etiquetaInterna("strip_fin");
+            sb.append("    mv t0, a0\n");
+            sb.append(loop).append(":\n");
+            sb.append("    lb t2, 0(t0)\n");
+            sb.append("    beqz t2, ").append(fin).append("\n");
+            sb.append("    li t3, 10\n");            // 10 = '\n'
+            sb.append("    beq t2, t3, ").append(fin).append("\n");
+            sb.append("    addi t0, t0, 1\n");
+            sb.append("    j ").append(loop).append("\n");
+            sb.append(fin).append(":\n");
+            sb.append("    sb zero, 0(t0)\n");       // reemplazar \n (o confirmar \0)
+            // El resultado (direccion del buffer) queda en a0.
             guardar("a0", q.destino(), sb);
         } else if ("caracter".equals(tipo)) {
             sb.append("    li a7, 12\n");
@@ -467,8 +493,11 @@ public final class TraductorCuadruplaRiscV {
         sb.append("    la t1, heap_ptr\n");
         sb.append("    lw t2, 0(t1)\n");
         sb.append("    add t3, t2, t0\n");
-        sb.append("    la t5, heap_end\n");// Verificar que no se pase del limite del heap
-        sb.append("    bgeu t3, t5, _heap_overflow\n");
+        String okLabel = etiquetaInterna("heap_ok");
+        sb.append("    la t5, heap_end\n");
+        sb.append("    bltu t3, t5, ").append(okLabel).append("\n");
+        sb.append("    j _heap_overflow\n");
+        sb.append(okLabel).append(":\n");
         sb.append("    sw t3, 0(t1)\n");
     }
 
@@ -572,9 +601,20 @@ public final class TraductorCuadruplaRiscV {
         emitirDireccionElemento(sb, esInline);
         sb.append("    sw t4, 0(t1)\n");
     }
-    /** Calcula t1 = base + (indice [+1]) * 4, dejando la direccion del elemento en t1. */
+    /** Calcula t1 = base + (indice [+1]) * 4, dejando la direccion del elemento en t1.
+     *  Además, si es un arreglo dinámico, verifica en runtime que 0 <= indice < longitud. */
     private void emitirDireccionElemento(StringBuilder sb, boolean esInline) {
         if (!esInline) {
+            String ok = etiquetaInterna("idx_ok");
+            // t2 = indice, t1 = base del arreglo, t1[0] = longitud
+            // Verificar: 0 <= t2 < longitud
+            sb.append("    lw t5, 0(t1)\n");          // t5 = longitud
+            sb.append("    bgez t2, ").append(ok).append("_pos\n");
+            sb.append("    j _idx_out_of_bounds\n");
+            sb.append(ok).append("_pos:\n");
+            sb.append("    blt t2, t5, ").append(ok).append("\n");
+            sb.append("    j _idx_out_of_bounds\n");
+            sb.append(ok).append(":\n");
             sb.append("    addi t2, t2, 1\n");
         }
         sb.append("    slli t2, t2, 2\n");
@@ -635,6 +675,10 @@ public final class TraductorCuadruplaRiscV {
         String iguales = etiquetaInterna("strcmp_eq");
         String distintas = etiquetaInterna("strcmp_neq");
         String fin = etiquetaInterna("strcmp_fin");
+        // Si ambos son null (0), son iguales. Si solo uno es null, son distintos. Esto evita un lb de la direccion 0 que crashea.
+        sb.append("    beq t0, t1, ").append(iguales).append("\n");
+        sb.append("    beqz t0, ").append(distintas).append("\n");
+        sb.append("    beqz t1, ").append(distintas).append("\n");
         sb.append(loop).append(":\n");
         sb.append("    lb t2, 0(t0)\n");
         sb.append("    lb t3, 0(t1)\n");
