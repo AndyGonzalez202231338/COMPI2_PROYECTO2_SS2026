@@ -39,7 +39,7 @@ public final class OrquestadorRiscV {
     // Bytes reservados para el heap. Alcanza para miles de objetos pequenos; si un
     // programa pidiera mas, simplemente se saldria de la zona reservada (no hay
     // comprobacion de limite, igual que no hay liberacion de memoria).
-    private static final int BYTES_HEAP = 4096;
+    private static final int BYTES_HEAP = 65536; //64KB
 
     // Archivos cuyo codigo va en este .s. Para un .y o .z suelto es uno solo; para un
     // .pig es el propio .pig mas todos los .y/.z que importa, porque Venus ejecuta un
@@ -128,9 +128,18 @@ public final class OrquestadorRiscV {
         sb.append("\n# --- heap: memoria para new (objetos, estructuras y arreglos) ---\n");
         sb.append("heap_ptr: .word 0\n");
         sb.append("heap_mem: .space ").append(BYTES_HEAP).append("\n");
+        sb.append("heap_end: .word 0\n");
+        sb.append("_heap_err_msg: .string \"Error: heap agotado\\n\"\n");
         sb.append("\n.text\n");
         sb.append(".globl main\n\n");
         sb.append(texto);
+        // Rutina de error por heap agotado
+        sb.append("_heap_overflow:\n");
+        sb.append("    la a0, _heap_err_msg\n");
+        sb.append("    li a7, 4\n");
+        sb.append("    ecall\n");
+        sb.append("    li a7, 10\n");
+        sb.append("    ecall\n\n");
         return sb.toString();
     }
 

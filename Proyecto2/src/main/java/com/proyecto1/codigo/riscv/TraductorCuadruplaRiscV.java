@@ -407,6 +407,9 @@ public final class TraductorCuadruplaRiscV {
         sb.append("    la t1, heap_ptr\n");
         sb.append("    lw t2, 0(t1)\n");
         sb.append("    add t3, t2, t0\n");
+        // Verificar que no se pase del limite del heap
+        sb.append("    la t5, heap_end\n");
+        sb.append("    bgeu t3, t5, _heap_overflow\n");
         sb.append("    sw t3, 0(t1)\n");
     }
 
