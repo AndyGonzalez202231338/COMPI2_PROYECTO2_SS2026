@@ -118,9 +118,15 @@ public final class Binaria extends NodoY implements ExpresionY {
         }
         // a + b o a > b
         String t = generador.nuevoTemporal();
-        //t0 = a + b
-        //Crear la cuadrupla(+, a, b, t0)
-        generador.emitirBinaria(operador, a.getLugar(), b.getLugar(), t);
+        if ((operador.equals("==") || operador.equals("!="))
+                && a.getTipo() == TipoPrimitivo.CADENA
+                && b.getTipo() == TipoPrimitivo.CADENA) {
+            generador.emitirCompCadena(operador, a.getLugar(), b.getLugar(), t);
+        } else {
+            //t0 = a + b
+            //Crear la cuadrupla(+, a, b, t0)
+            generador.emitirBinaria(operador, a.getLugar(), b.getLugar(), t);
+        }
         //c = t0 resultado del temporal para guardar en su variable
         //(t0,aritmetico o booleano)
         return ResultadoC3D.temporal(t, tipo);

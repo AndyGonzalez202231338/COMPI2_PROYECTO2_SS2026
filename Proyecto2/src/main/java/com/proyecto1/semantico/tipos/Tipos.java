@@ -20,12 +20,10 @@ public final class Tipos {
         // Promoción implícita numérica: entero -> flotante (no al revés).
         if (destino == TipoPrimitivo.FLOTANTE && origen == TipoPrimitivo.ENTERO) return true;
 
-        // null solo es asignable a tipos compuestos o arreglos (nunca a primitivos).
-        //if (origen == TipoPrimitivo.NULO && (destino.esCompuesto() || destino.esArreglo())) return true;
-
-        // null solo es asignable a tipos compuestos (clases, estructuras) y arreglos.
+        // null es asignable a tipos compuestos (clases, estructuras), arreglos y CADENA (String).
+        // Ya que en el backend, las cadenas se manejan como punteros a memoria.
         if (origen == TipoPrimitivo.NULO) {
-            return destino.esCompuesto() || destino instanceof TipoArreglo;
+            return destino.esCompuesto() || destino instanceof TipoArreglo || destino == TipoPrimitivo.CADENA;
         }
 
         // Herencia: un objeto de la subclase se puede guardar donde se espera la
